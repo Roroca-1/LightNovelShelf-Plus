@@ -275,6 +275,7 @@ class _ReaderContentViewState extends State<ReaderContentView> {
   bool _scrolling = false;
   double _boundaryOverscroll = 0;
   bool _boundaryTriggered = false;
+  bool? _pendingBoundary;
 
   /// 已通知上层、窗口尚未平移的那一章。`jumpTo` 与惯性收尾会多次上报落定，用于去重。
   int? _notifiedChapter;
@@ -333,6 +334,7 @@ class _ReaderContentViewState extends State<ReaderContentView> {
       _notifiedChapter = null;
       _boundaryOverscroll = 0;
       _boundaryTriggered = false;
+      _pendingBoundary = null;
     }
     final known = _slotFor(widget.sortNum);
     if (known == null ||
@@ -387,6 +389,7 @@ class _ReaderContentViewState extends State<ReaderContentView> {
     _pendingEdge = null;
     _boundaryOverscroll = 0;
     _boundaryTriggered = false;
+    _pendingBoundary = null;
     _requested.clear();
     _syncSlots();
   }
@@ -1029,8 +1032,17 @@ class _ReaderContentViewState extends State<ReaderContentView> {
 
   bool _onContinuousScroll(ScrollNotification notification) {
     if (notification is ScrollEndNotification) {
+      final boundary = _pendingBoundary;
       _boundaryOverscroll = 0;
       _boundaryTriggered = false;
+      _pendingBoundary = null;
+      // 等手指离开、当前 ScrollPosition 完全结束后再换章。若在
+      // OverscrollNotification 里立即替换控制器，未结束的手势会把新章
+      // 的章尾位置拉回 0。
+      if (boundary != null) {
+        widget.onBoundary(boundary);
+        return false;
+      }
       _report(force: true);
       return false;
     }
@@ -1050,7 +1062,7 @@ class _ReaderContentViewState extends State<ReaderContentView> {
     _boundaryOverscroll += notification.overscroll.abs();
     if (_boundaryOverscroll >= 72) {
       _boundaryTriggered = true;
-      widget.onBoundary(next);
+      _pendingBoundary = next;
     }
     return false;
   }
