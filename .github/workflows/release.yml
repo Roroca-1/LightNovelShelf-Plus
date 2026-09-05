@@ -61,7 +61,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Build Android ARM64 release APK
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
       - name: Collect Android artifact
         run: |
           mkdir -p dist
@@ -97,7 +97,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build linux --release
+      - run: flutter build linux --release --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
       - name: Package Linux AppImage
         run: |
           mkdir -p dist
@@ -202,7 +202,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release --dart-define=APP_RELEASE_TAG=$env:RELEASE_TAG
       - name: Install Inno Setup
         shell: pwsh
         run: |

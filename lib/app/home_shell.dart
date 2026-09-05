@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../data/repositories/profile_repository.dart';
 import '../core/platform/desktop_platform.dart';
+import '../data/repositories/app_update_repository.dart';
+import '../data/repositories/profile_repository.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.shell});
@@ -27,6 +29,43 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     autoCheckInResult.addListener(_showCheckInResult);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showCheckInResult());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+  }
+
+  Future<void> _checkForUpdate() async {
+    AppUpdate? update;
+    try {
+      update = await const AppUpdateRepository().check();
+    } catch (_) {
+      return;
+    }
+    if (!mounted || update == null) return;
+    final found = update;
+    final target = found.downloadUrl ?? found.releaseUrl;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.system_update_outlined),
+        title: Text('发现新版本 ${found.tag}'),
+        content: const Text('可以下载适合当前平台的安装包。安装前会由系统再次确认。'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('稍后'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await launchUrl(
+                Uri.parse(target),
+                mode: LaunchMode.externalApplication,
+              );
+            },
+            child: const Text('下载更新'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

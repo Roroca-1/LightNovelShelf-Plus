@@ -559,17 +559,21 @@ class _ReaderChapterPreview extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              '${percentage.toStringAsFixed(1)}%',
-              style: TextStyle(
-                color: onSurface.withValues(alpha: 0.76),
-                fontSize: 14,
-                height: 18 / 14,
-                fontWeight: FontWeight.w600,
-                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            if (unit != '%') ...<Widget>[
+              const SizedBox(height: 3),
+              Text(
+                '${percentage.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: onSurface.withValues(alpha: 0.76),
+                  fontSize: 14,
+                  height: 18 / 14,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

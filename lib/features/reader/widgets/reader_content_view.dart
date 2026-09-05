@@ -1121,16 +1121,18 @@ class _ReaderContentViewState extends State<ReaderContentView> {
           if (active != null && active.renderable)
             Positioned.fill(
               key: const ValueKey<String>('reader-content'),
-              child: ReaderTapZoneLayer(
-                onPrevious: () => _turn(false),
-                onNext: () => _turn(true),
-                onToggleChrome: widget.onTapCenter,
-                // 滚动模式按上下分区：上一屏在上、下一屏在下，跟内容移动方向一致。
-                axis: widget.paged ? Axis.horizontal : Axis.vertical,
-                child: widget.paged
-                    ? _pagedContent(viewport)
-                    : _scrollingContent(active),
-              ),
+              child: widget.paged
+                  ? ReaderTapZoneLayer(
+                      onPrevious: () => _turn(false),
+                      onNext: () => _turn(true),
+                      onToggleChrome: widget.onTapCenter,
+                      child: _pagedContent(viewport),
+                    )
+                  : GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: widget.onTapCenter,
+                      child: _scrollingContent(active),
+                    ),
             ),
         ],
       );
