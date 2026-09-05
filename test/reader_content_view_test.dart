@@ -426,26 +426,25 @@ void main() {
     expect(position.pixels, closeTo(0, 0.5));
   });
 
-  testWidgets('滚动模式热区上下翻屏、中间切工具栏', (tester) async {
+  testWidgets('滚动模式点击任意位置只切换工具栏', (tester) async {
     final harness = await _pump(tester, paged: false);
     final position = tester
         .state<ScrollableState>(find.byType(Scrollable).last)
         .position;
     final view = tester.getRect(find.byType(ReaderContentView));
-    final step = position.viewportDimension * 0.95;
-
     await tester.tapAt(Offset(view.center.dx, view.bottom - view.height * 0.1));
-    await tester.pump(const Duration(milliseconds: 300));
-    expectAlignedStep(position, step);
-    expect(harness.centerTaps, 0);
+    await tester.pump();
+    expect(position.pixels, closeTo(0, 0.5));
+    expect(harness.centerTaps, 1);
 
     await tester.tapAt(Offset(view.center.dx, view.top + view.height * 0.1));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
     expect(position.pixels, closeTo(0, 0.5));
+    expect(harness.centerTaps, 2);
 
     await tester.tapAt(view.center);
     await tester.pump();
-    expect(harness.centerTaps, 1);
+    expect(harness.centerTaps, 3);
     expect(position.pixels, closeTo(0, 0.5));
   });
 

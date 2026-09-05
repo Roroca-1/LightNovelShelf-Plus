@@ -254,8 +254,10 @@ void main() {
         .position;
     expect(current.pixels, closeTo(current.minScrollExtent, 0.5));
 
-    final view = tester.getRect(find.byType(ReaderContentView));
-    await tester.tapAt(Offset(view.center.dx, view.top + view.height * 0.1));
+    await tester.drag(
+      find.byType(Scrollable).last,
+      const Offset(0, 180),
+    );
     await tester.pumpAndSettle();
 
     final previous = tester
@@ -264,12 +266,9 @@ void main() {
     expect(previous.maxScrollExtent, greaterThan(0));
     expect(previous.pixels, closeTo(previous.maxScrollExtent, 0.5));
 
-    final previousView = tester.getRect(find.byType(ReaderContentView));
-    await tester.tapAt(
-      Offset(
-        previousView.center.dx,
-        previousView.bottom - previousView.height * 0.1,
-      ),
+    await tester.drag(
+      find.byType(Scrollable).last,
+      const Offset(0, -180),
     );
     await tester.pumpAndSettle();
 
