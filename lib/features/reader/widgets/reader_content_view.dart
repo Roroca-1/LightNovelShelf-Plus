@@ -440,9 +440,23 @@ class _ReaderContentViewState extends State<ReaderContentView> {
     if (geometry == null) return;
     _syncStrip();
     _installControllers(_anchorOffset(geometry, _viewport));
-    // didUpdateWidget 处于上层的 build 中，上报要等这一帧画完。
+    // didUpdateWidget 处于上层的 build 中，要等新控制器挂载后再校正位置。
+    // Scrollable 在同一元素上替换控制器时可能保留旧的 pixels，使初始
+    // scrollOffset 没有生效；向前跨章时会因此错落到上一章章首。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _report(force: true);
+      if (!mounted) return;
+      final controller = _scrollController;
+      if (!widget.paged && controller != null && controller.hasClients) {
+        final position = controller.position;
+        final target = _installedOffset.clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ).toDouble();
+        if ((controller.offset - target).abs() >= 0.5) {
+          controller.jumpTo(target);
+        }
+      }
+      _report(force: true);
     });
   }
 
