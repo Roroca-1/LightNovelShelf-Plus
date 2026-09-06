@@ -466,10 +466,10 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
       next: next,
     );
     if (target == null) return;
-    await _openChapter(
-      target,
-      next ? ReaderOpenPosition.start : ReaderOpenPosition.end,
-    );
+    // 连续滚动跨章统一从章首进入。上一章末尾是客户端布局坐标，
+    // 不是章节接口可请求的位置；强行在换章后跳到末尾也容易被旧的
+    // ScrollPosition 覆盖。分页模式仍由翻页条自然落在上一章末页。
+    await _openChapter(target, ReaderOpenPosition.start);
   }
 
   Future<void> _commitPosition() async {
