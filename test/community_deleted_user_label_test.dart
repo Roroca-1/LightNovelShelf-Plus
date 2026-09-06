@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lightnovel/data/api/models.dart';
-import 'package:lightnovel/features/community/community_thread_providers.dart';
-import 'package:lightnovel/features/community/widgets/community_reply_row.dart';
-import 'package:lightnovel/features/community/widgets/community_thread_header.dart';
+import 'package:lightnovel_shelf_plus/data/api/models.dart';
+import 'package:lightnovel_shelf_plus/features/community/community_thread_providers.dart';
+import 'package:lightnovel_shelf_plus/features/community/widgets/community_reply_row.dart';
+import 'package:lightnovel_shelf_plus/features/community/widgets/community_thread_header.dart';
 
 const _emptyPage = CommunityPagination(
   page: 1,

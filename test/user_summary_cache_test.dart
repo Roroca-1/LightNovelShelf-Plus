@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lightnovel/core/network/api_error.dart';
-import 'package:lightnovel/core/network/request_scheduler.dart';
-import 'package:lightnovel/core/network/signalr_connection.dart';
-import 'package:lightnovel/data/api/api_client.dart';
-import 'package:lightnovel/data/repositories/user_summary.dart';
+import 'package:lightnovel_shelf_plus/core/network/api_error.dart';
+import 'package:lightnovel_shelf_plus/core/network/request_scheduler.dart';
+import 'package:lightnovel_shelf_plus/core/network/signalr_connection.dart';
+import 'package:lightnovel_shelf_plus/data/api/api_client.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/user_summary.dart';
 
 class _FakeApi extends ApiClient {
   _FakeApi()

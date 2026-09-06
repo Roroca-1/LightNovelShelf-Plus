@@ -5,16 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lightnovel/app/home_shell.dart';
-import 'package:lightnovel/core/network/request_scheduler.dart';
-import 'package:lightnovel/core/network/signalr_connection.dart';
-import 'package:lightnovel/data/api/api_client.dart';
-import 'package:lightnovel/data/api/models.dart';
-import 'package:lightnovel/data/providers.dart';
-import 'package:lightnovel/data/repositories/direct_message_realtime.dart';
-import 'package:lightnovel/data/repositories/profile_repository.dart';
-import 'package:lightnovel/data/repositories/unread_counts.dart';
-import 'package:lightnovel/features/message/direct_message_providers.dart';
+import 'package:lightnovel_shelf_plus/app/home_shell.dart';
+import 'package:lightnovel_shelf_plus/core/network/request_scheduler.dart';
+import 'package:lightnovel_shelf_plus/core/network/signalr_connection.dart';
+import 'package:lightnovel_shelf_plus/data/api/api_client.dart';
+import 'package:lightnovel_shelf_plus/data/api/models.dart';
+import 'package:lightnovel_shelf_plus/data/providers.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/direct_message_realtime.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/profile_repository.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/unread_counts.dart';
+import 'package:lightnovel_shelf_plus/features/message/direct_message_providers.dart';
 
 const int _peerId = 2;
 

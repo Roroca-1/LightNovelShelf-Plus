@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lightnovel/core/network/api_error.dart';
-import 'package:lightnovel/data/api/models.dart';
-import 'package:lightnovel/data/repositories/profile_repository.dart';
-import 'package:lightnovel/data/repositories/user_summary.dart';
-import 'package:lightnovel/shared/widgets/user_card_sheet.dart';
+import 'package:lightnovel_shelf_plus/core/network/api_error.dart';
+import 'package:lightnovel_shelf_plus/data/api/models.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/profile_repository.dart';
+import 'package:lightnovel_shelf_plus/data/repositories/user_summary.dart';
+import 'package:lightnovel_shelf_plus/shared/widgets/user_card_sheet.dart';
 
 const int _userId = 66660;
 
