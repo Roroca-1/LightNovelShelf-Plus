@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -7,17 +9,20 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/platform/desktop_platform.dart';
 import '../data/repositories/app_update_repository.dart';
 import '../data/repositories/profile_repository.dart';
+import '../data/repositories/unread_counts.dart';
+import '../shared/widgets/unread_badge.dart';
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   void _switchBranch(int delta) {
     final count = 5;
     final next = (widget.shell.currentIndex + delta + count) % count;
@@ -27,9 +32,17 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     autoCheckInResult.addListener(_showCheckInResult);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showCheckInResult());
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(communityUnreadCountProvider.notifier).reconcile());
+    }
   }
 
   Future<void> _checkForUpdate() async {
@@ -70,14 +83,16 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     autoCheckInResult.removeListener(_showCheckInResult);
     super.dispose();
   }
 
   void _showCheckInResult() {
-    final result = autoCheckInResult.value;
-    if (result == null || !mounted) return;
+    final notice = autoCheckInResult.value;
+    if (notice == null || !mounted) return;
     autoCheckInResult.value = null;
+    final result = notice.result;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       showDialog<void>(
@@ -86,7 +101,7 @@ class _HomeShellState extends State<HomeShell> {
           icon: const Icon(Icons.event_available_outlined),
           title: const Text('签到成功'),
           content: Text(
-            '获得 ${result.experience} 经验和 ${result.reward} 金币\n'
+            '获得 ${notice.gainedExperience} 经验和 ${result.reward} 金币\n'
             '连续签到 ${result.streak} 天 · 当前等级 ${result.level}',
           ),
           actions: <Widget>[
@@ -143,8 +158,8 @@ class _HomeShellState extends State<HomeShell> {
               label: '历史',
             ),
             NavigationDestination(
-              icon: _UnreadBadge(child: Icon(Icons.forum_outlined)),
-              selectedIcon: _UnreadBadge(child: Icon(Icons.forum)),
+              icon: _CommunityUnreadBadge(child: Icon(Icons.forum_outlined)),
+              selectedIcon: _CommunityUnreadBadge(child: Icon(Icons.forum)),
               label: '社区',
             ),
             NavigationDestination(
@@ -162,22 +177,12 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 /// 单独订阅未读数，避免资料刷新把整个 shell（连带 indexedStack 里所有 tab）标脏。
-class _UnreadBadge extends ConsumerWidget {
-  const _UnreadBadge({required this.child});
+class _CommunityUnreadBadge extends ConsumerWidget {
+  const _CommunityUnreadBadge({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unread = ref.watch(
-      profileProvider.select(
-        (profile) => profile.value?.unreadNotificationCount ?? 0,
-      ),
-    );
-    return Badge(
-      isLabelVisible: unread > 0,
-      label: Text(unread > 99 ? '99+' : '$unread'),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) =>
+      UnreadBadge(count: ref.watch(communityUnreadCountProvider), child: child);
 }

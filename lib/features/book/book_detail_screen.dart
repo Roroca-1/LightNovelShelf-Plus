@@ -11,8 +11,10 @@ import '../../data/api/models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/read_position_cache.dart';
 import '../../shared/format.dart';
+import '../../shared/widgets/app_dialogs.dart';
 import '../../shared/widgets/state_views.dart';
 import '../../shared/widgets/html_content.dart';
+import '../../shared/widgets/user_card_sheet.dart';
 import '../search/search_providers.dart';
 import 'book_providers.dart';
 import 'widgets/book_action_row.dart';
@@ -20,7 +22,6 @@ import 'widgets/book_detail_hero.dart';
 import 'widgets/book_detail_skeleton.dart';
 import 'widgets/book_introduction_sheet.dart';
 import 'widgets/book_series_sheet.dart';
-import 'widgets/book_uploader_sheet.dart';
 import 'widgets/cover_palette_theme.dart';
 
 class BookDetailScreen extends ConsumerStatefulWidget {
@@ -122,6 +123,9 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
     final colors = Theme.of(context).colorScheme;
     final hasAppBackground =
         ref.read(appSettingsProvider).appBackground.path?.isNotEmpty == true;
+    final hasOtherSeriesBooks = detail.series.any(
+      (book) => book.id != widget.id,
+    );
     final position = ReadPositionCache.merge(widget.id, detail.readPosition);
     final currentIndex = position == null
         ? -1
@@ -151,20 +155,31 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                   showBookSeriesSheet(this.context, detail, widget.id);
                   return;
                 }
+                final uploader = detail.user;
+                if (uploader == null || uploader.id <= 0) {
+                  showAppSnackBar(this.context, '这本书没有上传者资料。');
+                  return;
+                }
                 // 用 State 的 context，使弹窗沿用应用主题而非封面取色主题。
-                showBookUploaderSheet(this.context, detail.user);
+                showUserCardSheet(
+                  this.context,
+                  userId: uploader.id,
+                  userName: uploader.userName,
+                  avatarUrl: uploader.avatarUrl,
+                );
               },
-              itemBuilder: (_) => const <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
-                  value: 'series',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.library_books_outlined),
-                    title: Text('系列'),
+              itemBuilder: (_) => <PopupMenuEntry<String>>[
+                if (hasOtherSeriesBooks)
+                  const PopupMenuItem<String>(
+                    value: 'series',
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.library_books_outlined),
+                      title: Text('系列'),
+                    ),
                   ),
-                ),
-                PopupMenuItem<String>(
+                const PopupMenuItem<String>(
                   value: 'uploader',
                   child: ListTile(
                     dense: true,

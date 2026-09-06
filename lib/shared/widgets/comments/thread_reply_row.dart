@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../format.dart';
 import '../user_avatar.dart';
+import '../user_name_text.dart';
 
 /// 主楼与子级回复的图标尺寸，子级小一号。
 double threadRowIconSize(bool isChild) => isChild ? 16.0 : 18.0;
@@ -13,23 +14,30 @@ double threadRowIconSize(bool isChild) => isChild ? 16.0 : 18.0;
 class ThreadReplyRow extends StatelessWidget {
   const ThreadReplyRow({
     super.key,
+    required this.userId,
     required this.userName,
     required this.avatarUrl,
     required this.content,
     required this.publishedAt,
     required this.isChild,
     this.replyToUserName,
+    this.userDeleted = false,
+    this.replyToUserDeleted = false,
     this.badge,
     this.highlighted = false,
     this.actions = const <Widget>[],
   });
 
+  /// 用户 ID，0 表示未知作者，头像不可点。
+  final int userId;
   final String userName;
   final String avatarUrl;
   final String content;
   final DateTime? publishedAt;
   final bool isChild;
   final String? replyToUserName;
+  final bool userDeleted;
+  final bool replyToUserDeleted;
   final Widget? badge;
   final bool highlighted;
   final List<Widget> actions;
@@ -37,7 +45,8 @@ class ThreadReplyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final replyToName = replyToUserName?.trim() ?? '';
+    final visibleUserName = displayUserName(userName, deleted: userDeleted);
+    final hasReplyTarget = replyToUserName != null;
     final double indent = isChild ? 0 : 56;
 
     final Widget body = Column(
@@ -47,30 +56,50 @@ class ThreadReplyRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              UserAvatar(url: avatarUrl, name: userName, size: 24),
+              UserAvatar(
+                url: avatarUrl,
+                name: visibleUserName,
+                size: 24,
+                userId: userId,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    children: <InlineSpan>[
-                      TextSpan(
-                        text: userName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      if (replyToName.isNotEmpty)
-                        TextSpan(
-                          text: ' 回复了 $replyToName',
-                          style: TextStyle(color: colors.onSurfaceVariant),
+                child: Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: UserNameText(
+                        name: userName,
+                        deleted: userDeleted,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 16 / 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.onSurface,
                         ),
+                      ),
+                    ),
+                    if (hasReplyTarget) ...<Widget>[
+                      Text(
+                        ' 回复了 ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 16 / 12,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Flexible(
+                        child: UserNameText(
+                          name: replyToUserName!,
+                          deleted: replyToUserDeleted,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 16 / 12,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 16 / 12,
-                    color: colors.onSurface,
-                  ),
+                  ],
                 ),
               ),
               ?badge,
@@ -80,7 +109,12 @@ class ThreadReplyRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              UserAvatar(url: avatarUrl, name: userName, size: 40),
+              UserAvatar(
+                url: avatarUrl,
+                name: visibleUserName,
+                size: 40,
+                userId: userId,
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -89,10 +123,9 @@ class ThreadReplyRow extends StatelessWidget {
                     Row(
                       children: <Widget>[
                         Flexible(
-                          child: Text(
-                            userName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: UserNameText(
+                            name: userName,
+                            deleted: userDeleted,
                             style: TextStyle(
                               fontSize: 14,
                               height: 19 / 14,
@@ -107,15 +140,30 @@ class ThreadReplyRow extends StatelessWidget {
                         ],
                       ],
                     ),
-                    if (replyToName.isNotEmpty) ...<Widget>[
+                    if (hasReplyTarget) ...<Widget>[
                       const SizedBox(height: 4),
-                      Text(
-                        '回复 $replyToName',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: colors.primary,
-                        ),
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            '回复 ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.primary,
+                            ),
+                          ),
+                          Flexible(
+                            child: UserNameText(
+                              name: replyToUserName!,
+                              deleted: replyToUserDeleted,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: colors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],

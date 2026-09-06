@@ -50,6 +50,12 @@ jobs:
           flutter-version: 3.47.0
           channel: stable
           cache: true
+      - name: Require persistent Android signing
+        if: env.HAS_ANDROID_KEYSTORE != 'true'
+        run: |
+          echo "::error::Public Android releases require the repository's persistent signing secrets."
+          echo "::error::Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD."
+          exit 1
       - name: Configure Android signing
         if: env.HAS_ANDROID_KEYSTORE == 'true'
         env:
@@ -62,6 +68,14 @@ jobs:
       - run: flutter test
       - name: Build Android ARM64 release APK
         run: flutter build apk --release --target-platform android-arm64 --split-per-abi --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
+      - name: Verify Plus application ID
+        run: |
+          apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n1)"
+          test -x "$aapt"
+          package_name="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          echo "APK application ID: $package_name"
+          test "$package_name" = "app.lightnovel.shelf.plus"
       - name: Collect Android artifact
         run: |
           mkdir -p dist

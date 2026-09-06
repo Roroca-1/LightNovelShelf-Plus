@@ -7,9 +7,16 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../providers.dart';
 
+class AutoCheckInNotice {
+  const AutoCheckInNotice({required this.result, required this.gainedExperience});
+
+  final DailyCheckInResult result;
+  final int gainedExperience;
+}
+
 /// 自动签到成功事件。主页消费后清空，避免切换页面重复弹窗。
-final ValueNotifier<DailyCheckInResult?> autoCheckInResult =
-    ValueNotifier<DailyCheckInResult?>(null);
+final ValueNotifier<AutoCheckInNotice?> autoCheckInResult =
+    ValueNotifier<AutoCheckInNotice?>(null);
 
 /// 当前账号资料；未登录时保持 `null`。
 class ProfileController extends AsyncNotifier<UserProfile?> {
@@ -35,8 +42,15 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     if (!profile.growth.signedToday) {
       try {
         final result = await _api.checkIn();
-        autoCheckInResult.value = result;
-        profile = await _api.getMyProfile();
+        final refreshed = await _api.getMyProfile();
+        autoCheckInResult.value = AutoCheckInNotice(
+          result: result,
+          gainedExperience:
+              (refreshed.growth.experience - profile.growth.experience)
+                  .clamp(0, 1 << 31)
+                  .toInt(),
+        );
+        profile = refreshed;
       } catch (_) {
         // 自动签到不能阻止应用启动；网络恢复后下次重建资料时会再尝试。
       }
@@ -58,6 +72,13 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
       if (!ref.read(authSnapshotProvider).isAuthenticated) return null;
       return _loadFresh();
     });
+  }
+
+  /// 后台对账用：不进 loading 态，未读角标不会在刷新途中闪回 0。
+  Future<void> refreshQuietly() async {
+    if (!ref.read(authSnapshotProvider).isAuthenticated) return;
+    final profile = await _api.getMyProfile();
+    state = AsyncValue<UserProfile?>.data(profile);
   }
 
   Future<DailyCheckInResult> checkIn() async {

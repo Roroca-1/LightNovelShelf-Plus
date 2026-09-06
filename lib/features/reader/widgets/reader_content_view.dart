@@ -803,7 +803,12 @@ class _ReaderContentViewState extends State<ReaderContentView> {
     _pageController?.dispose();
     _pageController = null;
     // 控制器带初始偏移新建，避免先挂载再 jumpTo 造成一帧跳动。
-    _scrollController = ScrollController(initialScrollOffset: _installedOffset)
+    // 阅读位置由 locator/progression 自己管理。PageStorage 的自动恢复
+    // 会在同一阅读页换章时用旧章偏移覆盖 initialScrollOffset。
+    _scrollController = ScrollController(
+      initialScrollOffset: _installedOffset,
+      keepScrollOffset: false,
+    )
       ..addListener(_onScroll);
   }
 
