@@ -619,9 +619,7 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
     _changingChapterFromScroll = true;
     _chapterOverscroll = 0;
     unawaited(
-      // 连续滚动跨章统一从目标章首开始；工具栏的“上一章”仍保留
-      // 传统的从章末打开行为。
-      _openChapterIndex(target).whenComplete(() {
+      _openChapterIndex(target, openAtEnd: wantsPrevious).whenComplete(() {
         if (mounted) _changingChapterFromScroll = false;
       }),
     );

@@ -374,21 +374,16 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
     if (target == null || sortNum == _sortNum) return;
     final leaving = _window.current;
     final forward = sortNum > _sortNum;
-    final paged =
-        ref.read(appSettingsProvider).novelReader.viewMode ==
-        ReaderViewMode.paged;
-    final openAtStart = forward || !paged;
     setState(() {
       _window = _window.moveTo(sortNum);
       _sortNum = sortNum;
-      _openPosition = openAtStart
+      _openPosition = forward
           ? ReaderOpenPosition.start
           : ReaderOpenPosition.end;
-      // 连续滚动跨章不继承缓存 locator，否则章首策略会被该章之前
-      // 保存的末尾位置覆盖。分页向前翻仍可落在上一章末页。
-      _restoreLocator = paged ? _locators[sortNum] : null;
-      _restoreProgression = openAtStart ? 0 : 1;
-      _progression = openAtStart ? 0 : 1;
+      // 跨章按方向落在章首/章末，不继承该章之前保存的任意位置。
+      _restoreLocator = null;
+      _restoreProgression = forward ? 0 : 1;
+      _progression = forward ? 0 : 1;
     });
     _handoffProgress(leaving, target);
     _syncWindow();
@@ -472,10 +467,11 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
       next: next,
     );
     if (target == null) return;
-    // 连续滚动跨章统一从章首进入。上一章末尾是客户端布局坐标，
-    // 不是章节接口可请求的位置；强行在换章后跳到末尾也容易被旧的
-    // ScrollPosition 覆盖。分页模式仍由翻页条自然落在上一章末页。
-    await _openChapter(target, ReaderOpenPosition.start);
+    // 章节接口只负责正文；章首/章末由客户端排版完成后定位。
+    await _openChapter(
+      target,
+      next ? ReaderOpenPosition.start : ReaderOpenPosition.end,
+    );
   }
 
   Future<void> _commitPosition() async {

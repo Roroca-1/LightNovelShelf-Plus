@@ -246,7 +246,7 @@ void main() {
     expect(api.requested.toSet(), <int>{1, 2});
   });
 
-  testWidgets('滚动模式上下跨章都从目标章开头进入', (tester) async {
+  testWidgets('滚动模式跨章按方向落在目标章边界', (tester) async {
     await _open(tester, scroll: true, longSingleBlock: true);
 
     final current = tester
@@ -264,10 +264,8 @@ void main() {
         .state<ScrollableState>(find.byType(Scrollable).last)
         .position;
     expect(previous.maxScrollExtent, greaterThan(0));
-    expect(previous.pixels, closeTo(previous.minScrollExtent, 0.5));
+    expect(previous.pixels, closeTo(previous.maxScrollExtent, 0.5));
 
-    previous.jumpTo(previous.maxScrollExtent);
-    await tester.pump();
     await tester.drag(
       find.byType(Scrollable).last,
       const Offset(0, -180),
