@@ -1061,25 +1061,37 @@ class _ReaderContentViewState extends State<ReaderContentView> {
       _report(force: true);
       return false;
     }
-    if (notification is! OverscrollNotification || _boundaryTriggered) {
+    if (_boundaryTriggered) return false;
+    final metrics = notification.metrics;
+    final double distance;
+    final bool previous;
+    final bool next;
+    if (notification is ScrollUpdateNotification && metrics.outOfRange) {
+      // BouncingScrollPhysics 允许 pixels 暂时越过边界，此时发出的是
+      // ScrollUpdateNotification 而不一定是 OverscrollNotification。
+      final delta = notification.dragDetails?.primaryDelta;
+      if (delta == null) return false;
+      previous = metrics.pixels < metrics.minScrollExtent && delta > 0;
+      next = metrics.pixels > metrics.maxScrollExtent && delta < 0;
+      distance = delta.abs();
+    } else if (notification is OverscrollNotification) {
+      previous =
+          metrics.pixels <= metrics.minScrollExtent &&
+          notification.overscroll < 0;
+      next =
+          metrics.pixels >= metrics.maxScrollExtent &&
+          notification.overscroll > 0;
+      distance =
+          notification.dragDetails?.primaryDelta?.abs() ??
+          notification.overscroll.abs();
+    } else {
       return false;
     }
-    final atTop = notification.metrics.pixels <=
-        notification.metrics.minScrollExtent;
-    final atBottom = notification.metrics.pixels >=
-        notification.metrics.maxScrollExtent;
-    final previous = atTop && notification.overscroll < 0;
-    final next = atBottom && notification.overscroll > 0;
     if (!previous && !next) {
       _boundaryOverscroll = 0;
       return false;
     }
-    // BouncingScrollPhysics 会按当前位置对 overscroll 施加阻尼，同样的手指
-    // 位移在不同视口、刷新率下可能永远达不到固定阈值。触摸拖动优先累计
-    // 未经阻尼的原始位移；鼠标滚轮等没有 dragDetails 时再使用 overscroll。
-    _boundaryOverscroll +=
-        notification.dragDetails?.primaryDelta?.abs() ??
-        notification.overscroll.abs();
+    _boundaryOverscroll += distance;
     if (_boundaryOverscroll >= 72) {
       _boundaryTriggered = true;
       _pendingBoundary = next;
