@@ -432,6 +432,7 @@ class _ReaderContentViewState extends State<ReaderContentView> {
 
   /// 丢掉当前 locator，按新的恢复点重新定位当前章。
   void _restore() {
+    final restoreToken = widget.restoreToken;
     _locator = '';
     _progression = widget.restoreProgression;
     _pageIndex = 0;
@@ -443,15 +444,21 @@ class _ReaderContentViewState extends State<ReaderContentView> {
     if (geometry == null) return;
     _syncStrip();
     _installControllers(_anchorOffset(geometry, _viewport));
+    final controller = _scrollController;
+    final installedOffset = _installedOffset;
     // didUpdateWidget 处于上层的 build 中，要等新控制器挂载后再校正位置。
     // Scrollable 在同一元素上替换控制器时可能保留旧的 pixels，使初始
     // scrollOffset 没有生效；向前跨章时会因此错落到上一章章首。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final controller = _scrollController;
+      // 快速连续切章或窗口重排时，旧帧不能覆盖新章节的定位。
+      if (!mounted ||
+          widget.restoreToken != restoreToken ||
+          !identical(_scrollController, controller)) {
+        return;
+      }
       if (!widget.paged && controller != null && controller.hasClients) {
         final position = controller.position;
-        final target = _installedOffset.clamp(
+        final target = installedOffset.clamp(
           position.minScrollExtent,
           position.maxScrollExtent,
         ).toDouble();
@@ -847,6 +854,9 @@ class _ReaderContentViewState extends State<ReaderContentView> {
   }
 
   void _notifyChapter() {
+    // 连续滚动模式只由边界回调换章。若同时把可见槽位变化通知上层，
+    // 它会与异步的 onBoundary 竞争，偶发把“上一章末尾”覆盖成章首。
+    if (!widget.paged) return;
     final slot = _active;
     if (slot == null || slot.sortNum == widget.sortNum) return;
     if (_notifiedChapter == slot.sortNum) return;
