@@ -1074,7 +1074,12 @@ class _ReaderContentViewState extends State<ReaderContentView> {
       _boundaryOverscroll = 0;
       return false;
     }
-    _boundaryOverscroll += notification.overscroll.abs();
+    // BouncingScrollPhysics 会按当前位置对 overscroll 施加阻尼，同样的手指
+    // 位移在不同视口、刷新率下可能永远达不到固定阈值。触摸拖动优先累计
+    // 未经阻尼的原始位移；鼠标滚轮等没有 dragDetails 时再使用 overscroll。
+    _boundaryOverscroll +=
+        notification.dragDetails?.primaryDelta?.abs() ??
+        notification.overscroll.abs();
     if (_boundaryOverscroll >= 72) {
       _boundaryTriggered = true;
       _pendingBoundary = next;
