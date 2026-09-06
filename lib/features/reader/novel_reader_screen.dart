@@ -374,15 +374,21 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
     if (target == null || sortNum == _sortNum) return;
     final leaving = _window.current;
     final forward = sortNum > _sortNum;
+    final paged =
+        ref.read(appSettingsProvider).novelReader.viewMode ==
+        ReaderViewMode.paged;
+    final openAtStart = forward || !paged;
     setState(() {
       _window = _window.moveTo(sortNum);
       _sortNum = sortNum;
-      _openPosition = forward
+      _openPosition = openAtStart
           ? ReaderOpenPosition.start
           : ReaderOpenPosition.end;
-      _restoreLocator = _locators[sortNum];
-      _restoreProgression = forward ? 0 : 1;
-      _progression = forward ? 0 : 1;
+      // 连续滚动跨章不继承缓存 locator，否则章首策略会被该章之前
+      // 保存的末尾位置覆盖。分页向前翻仍可落在上一章末页。
+      _restoreLocator = paged ? _locators[sortNum] : null;
+      _restoreProgression = openAtStart ? 0 : 1;
+      _progression = openAtStart ? 0 : 1;
     });
     _handoffProgress(leaving, target);
     _syncWindow();
