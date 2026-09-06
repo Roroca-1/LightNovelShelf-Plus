@@ -223,6 +223,22 @@ Future<void> _spin(WidgetTester tester, [int frames = 20]) async {
   }
 }
 
+/// 跨章前会先异步提交离开章的阅读进度。`pumpAndSettle` 只等待已安排的帧，
+/// 不保证尚在 Future 链上的 setState 已经发生，因此先明确等到目标章挂上。
+Future<void> _waitForChapter(WidgetTester tester, int sortNum) async {
+  for (var frame = 0; frame < 120; frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    final view = tester.widget<ReaderContentView>(
+      find.byType(ReaderContentView),
+    );
+    if (view.sortNum == sortNum) {
+      await tester.pumpAndSettle();
+      return;
+    }
+  }
+  fail('阅读器未在规定时间内切换到第 $sortNum 章');
+}
+
 void main() {
   // 进度缓存是进程级的，上一个用例读到第几页会带进下一个用例。
   setUp(ReadPositionCache.clear);
@@ -258,7 +274,7 @@ void main() {
       find.byType(Scrollable).last,
       const Offset(0, 180),
     );
-    await tester.pumpAndSettle();
+    await _waitForChapter(tester, 1);
 
     final previous = tester
         .state<ScrollableState>(find.byType(Scrollable).last)
@@ -270,7 +286,7 @@ void main() {
       find.byType(Scrollable).last,
       const Offset(0, -180),
     );
-    await tester.pumpAndSettle();
+    await _waitForChapter(tester, 2);
 
     final next = tester
         .state<ScrollableState>(find.byType(Scrollable).last)
