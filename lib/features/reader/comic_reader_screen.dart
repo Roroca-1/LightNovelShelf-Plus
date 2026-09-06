@@ -800,6 +800,7 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
               onPrevious: () => _turn(-1),
               onNext: () => _turn(1),
               onToggleChrome: _toggleChrome,
+              child: const SizedBox.expand(),
             ),
           ),
         ],
