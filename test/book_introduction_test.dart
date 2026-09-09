@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lightnovel/data/api/models.dart';
-import 'package:lightnovel/features/book/widgets/book_introduction.dart';
-import 'package:lightnovel/shared/widgets/fade_clamp_box.dart';
-import 'package:lightnovel/shared/widgets/html_content.dart';
+import 'package:lightnovel_shelf_plus/data/api/models.dart';
+import 'package:lightnovel_shelf_plus/features/book/widgets/book_introduction.dart';
+import 'package:lightnovel_shelf_plus/shared/widgets/fade_clamp_box.dart';
+import 'package:lightnovel_shelf_plus/shared/widgets/html_content.dart';
 
 /// 折叠预算是五行紧凑行高，跟简介里有没有 ruby、着重号无关。
 const double _collapsedHeight = HtmlContent.compactFontSize * 1.3 * 5;

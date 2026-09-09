@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ShaderMaskLayer;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lightnovel/shared/widgets/fade_clamp_box.dart';
+import 'package:lightnovel_shelf_plus/shared/widgets/fade_clamp_box.dart';
 
 const double _budget = 40;
 const double _fade = 10;
