@@ -6,7 +6,7 @@ import 'package:lightnovel_shelf_plus/features/discover/widgets/book_grid.dart';
 import 'package:lightnovel_shelf_plus/shared/widgets/book_cover_grid_item.dart';
 
 void main() {
-  testWidgets('桌面和平板封面保持小尺寸，两行完整可见且无溢出', (tester) async {
+  testWidgets('桌面和平板封面保持舒适尺寸，两行完整可见且无溢出', (tester) async {
     addTearDown(tester.view.reset);
     tester.view.devicePixelRatio = 1;
     final books = List.generate(
@@ -43,10 +43,10 @@ void main() {
       final tiles = find.byType(BookCoverGridItem);
       final first = tester.getRect(tiles.first);
       final last = tester.getRect(tiles.last);
-      expect(first.width, lessThanOrEqualTo(140));
+      expect(first.width, greaterThanOrEqualTo(160));
       expect(last.bottom, lessThan(800));
       expect(last.right, lessThanOrEqualTo(width - 32));
-      if (width == 1280) expect(tiles, findsNWidgets(16));
+      if (width == 1280) expect(tiles, findsNWidgets(12));
       expect(tester.takeException(), isNull);
     }
   });
