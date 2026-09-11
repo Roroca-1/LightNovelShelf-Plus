@@ -111,7 +111,7 @@ class _DiscoverSectionState extends ConsumerState<_DiscoverSection>
       title = spec.title;
     }
     return Padding(
-      padding: EdgeInsets.only(top: widget.index == 0 ? 0 : 18),
+      padding: EdgeInsets.only(top: widget.index == 0 ? 0 : 12),
       child: _AsyncSection(
         spec: spec,
         title: title,

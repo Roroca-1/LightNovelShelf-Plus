@@ -136,7 +136,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final placeholders = tab.loadingMore
         ? layout.loadMorePlaceholderCount(tab.items.length)
         : 0;
-    final listMode = ref.read(appSettingsProvider).historyDisplayMode ==
+    final listMode =
+        ref.read(appSettingsProvider).historyDisplayMode ==
         BookDisplayMode.list;
     return <Widget>[
       if (listMode)
@@ -221,6 +222,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final data = async.value;
     final media = MediaQuery.sizeOf(context);
     final layout = BookGridLayout.of(
+      textScaler: MediaQuery.textScalerOf(context),
       media.width,
       horizontalPadding: _horizontalPadding,
     );

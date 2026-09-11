@@ -44,7 +44,7 @@ class GridTileTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: BookGridLayout.titleBoxHeight,
+    height: BookGridLayout.titleHeightFor(MediaQuery.textScalerOf(context)),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Center(

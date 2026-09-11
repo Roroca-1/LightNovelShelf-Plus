@@ -44,6 +44,7 @@ class BookGridPreview extends ConsumerWidget {
     builder: (context, constraints) {
       // 内边距已由父级扣除。
       final layout = BookGridLayout.of(
+        textScaler: MediaQuery.textScalerOf(context),
         constraints.maxWidth,
         horizontalPadding: 0,
       );
@@ -81,6 +82,7 @@ class BookGridPreviewSkeleton extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final layout = BookGridLayout.of(
+        textScaler: MediaQuery.textScalerOf(context),
         constraints.maxWidth,
         horizontalPadding: 0,
       );

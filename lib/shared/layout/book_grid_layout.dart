@@ -9,20 +9,25 @@ class BookGridLayout {
     required this.contentWidth,
     this.crossAxisSpacing = columnGap,
     this.mainAxisSpacing = rowGap,
+    this.titleHeight = titleBoxHeight,
   });
 
   static const double columnGap = 10;
   static const double rowGap = 12;
   static const double horizontalPadding = 20;
   static const double coverAspectRatio = 2 / 3;
-  // 桌面端会按系统 DPI 放大文字；40 在 108% 以上会让两行标题溢出。
-  static const double titleBoxHeight = 52;
+  // 默认两行标题加少量留白；大字体按实际缩放增加高度，避免溢出。
+  static const double titleBoxHeight = 40;
+
+  static double titleHeightFor(TextScaler scaler) =>
+      math.max(titleBoxHeight, scaler.scale(13) * (32 / 13) + 8);
 
   final int columns;
   final double tileWidth;
   final double contentWidth;
   final double crossAxisSpacing;
   final double mainAxisSpacing;
+  final double titleHeight;
 
   static int columnsFor(double contentWidth) {
     // 宽屏封面最大 140 逻辑像素；窗口变宽时增加列数，不放大封面。
@@ -36,6 +41,7 @@ class BookGridLayout {
   factory BookGridLayout.of(
     double windowWidth, {
     double horizontalPadding = BookGridLayout.horizontalPadding,
+    TextScaler textScaler = TextScaler.noScaling,
   }) {
     final contentWidth = math.max(1.0, windowWidth - 2 * horizontalPadding);
     final columns = columnsFor(contentWidth);
@@ -47,15 +53,16 @@ class BookGridLayout {
       tileWidth: tileWidth,
       contentWidth: contentWidth,
       crossAxisSpacing: gap,
-      mainAxisSpacing: contentWidth >= 600 ? 24 : rowGap,
+      mainAxisSpacing: rowGap,
+      titleHeight: titleHeightFor(textScaler),
     );
   }
 
   /// 封面区高度（不含标题区），也是向图床请求尺寸档的依据。
   double get coverHeight => tileWidth / coverAspectRatio;
 
-  // 额外空间吸收桌面端字体缩放、像素取整以及 InkWell 焦点描边。
-  double get tileHeight => coverHeight + titleBoxHeight + 16;
+  // 标题已计入文字缩放；只额外预留少量像素取整与焦点空间。
+  double get tileHeight => coverHeight + titleHeight + 4;
 
   /// 骨架屏单块高度：封面 + 7 间距 + 两条 13 高的文本占位 + 4 间距。
   double get skeletonTileHeight => coverHeight + 7 + 13 + 4 + 13;

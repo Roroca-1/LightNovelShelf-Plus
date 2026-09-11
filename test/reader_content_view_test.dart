@@ -114,6 +114,7 @@ class _Harness {
   final List<int> needed = <int>[];
   final List<int> chapterChanges = <int>[];
   int centerTaps = 0;
+  bool centeredText = false;
   int ready = 0;
 
   ReaderChapterContent get chapter =>
@@ -155,6 +156,7 @@ class _Harness {
           failedChapters: failedChapters,
           paged: paged,
           dualPage: dualPage,
+          centeredText: centeredText,
           padding: padding,
           restoreLocator: restoreLocator,
           restoreProgression: 0,
@@ -247,6 +249,45 @@ List<String> _screenSlots(WidgetTester tester, {int columns = 1}) =>
     readerScreenSlots(tester, columns: columns);
 
 void main() {
+  testWidgets('正文居中不改变双页排版', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final harness = _Harness(blocks: _blocks(40), paged: true, dualPage: true);
+    await tester.pumpWidget(harness.build());
+    await tester.pumpAndSettle();
+    final slots = readerScreenSlots(tester, columns: 2);
+    final pages = harness.last.pages;
+    harness.centeredText = true;
+    await tester.pumpWidget(harness.build());
+    await tester.pumpAndSettle();
+    expect(readerScreenSlots(tester, columns: 2), slots);
+    expect(harness.last.pages, pages);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final paged in [true, false]) {
+    testWidgets('正文居中限制行宽并可恢复全宽 paged=$paged', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final harness = _Harness(blocks: _blocks(8), paged: paged)
+        ..centeredText = true;
+      await tester.pumpWidget(harness.build());
+      await tester.pumpAndSettle();
+      final text = find.byWidgetPredicate((widget) => widget is RichText &&
+        widget.text.toPlainText().contains('第0段')).hitTestable().first;
+      final box = tester.getRect(text);
+      expect(box.width, closeTo(_style.fontSize * 32, 1));
+      expect(box.center.dx, closeTo(640, 1));
+      harness.centeredText = false;
+      await tester.pumpWidget(harness.build());
+      await tester.pumpAndSettle();
+      expect(tester.getRect(text).width, greaterThan(1000));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('整页插图点击预览不翻页，关闭后页边仍可翻页', (tester) async {
     final harness = _Harness(blocks: _pageBlocks(2), paged: true);
     await tester.pumpWidget(harness.build());

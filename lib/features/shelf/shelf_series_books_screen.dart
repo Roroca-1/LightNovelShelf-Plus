@@ -96,7 +96,7 @@ class _ShelfSeriesBooksScreenState
 
   @override
   Widget build(BuildContext context) {
-    final layout = BookGridLayout.of(MediaQuery.sizeOf(context).width);
+    final layout = BookGridLayout.of(MediaQuery.sizeOf(context).width, textScaler: MediaQuery.textScalerOf(context));
     return Scaffold(
       appBar: AppBar(
         title: Text(

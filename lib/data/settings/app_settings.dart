@@ -141,6 +141,7 @@ class ReaderPreferences {
     this.customTextColorEnabled = false,
     this.textColorValue = '#2B2B2B',
     this.dualPageEnabled = false,
+    this.centeredTextEnabled = false,
     this.dualPageOffsetEnabled = false,
     this.immersiveEnabled = false,
     this.pageTurnAnimation = ReaderPageTurnAnimation.none,
@@ -155,6 +156,7 @@ class ReaderPreferences {
   final bool customTextColorEnabled;
   final String textColorValue;
   final bool dualPageEnabled;
+  final bool centeredTextEnabled;
   final bool dualPageOffsetEnabled;
   final bool immersiveEnabled;
   final ReaderPageTurnAnimation pageTurnAnimation;
@@ -169,6 +171,7 @@ class ReaderPreferences {
     bool? customTextColorEnabled,
     String? textColorValue,
     bool? dualPageEnabled,
+    bool? centeredTextEnabled,
     bool? dualPageOffsetEnabled,
     bool? immersiveEnabled,
     ReaderPageTurnAnimation? pageTurnAnimation,
@@ -183,6 +186,7 @@ class ReaderPreferences {
         customTextColorEnabled ?? this.customTextColorEnabled,
     textColorValue: textColorValue ?? this.textColorValue,
     dualPageEnabled: dualPageEnabled ?? this.dualPageEnabled,
+    centeredTextEnabled: centeredTextEnabled ?? this.centeredTextEnabled,
     dualPageOffsetEnabled: dualPageOffsetEnabled ?? this.dualPageOffsetEnabled,
     immersiveEnabled: immersiveEnabled ?? this.immersiveEnabled,
     pageTurnAnimation: pageTurnAnimation ?? this.pageTurnAnimation,
@@ -210,15 +214,12 @@ class ReaderPreferences {
       backgroundColorValue: color is String && _hexPattern.hasMatch(color)
           ? color.toUpperCase()
           : '#F7F1E3',
-      customTextColorEnabled: _bool(
-        values['customTextColorEnabled'],
-        false,
-      ),
-      textColorValue:
-          textColor is String && _hexPattern.hasMatch(textColor)
+      customTextColorEnabled: _bool(values['customTextColorEnabled'], false),
+      textColorValue: textColor is String && _hexPattern.hasMatch(textColor)
           ? textColor.toUpperCase()
           : '#2B2B2B',
       dualPageEnabled: _bool(values['dualPageEnabled'], false),
+      centeredTextEnabled: _bool(values['centeredTextEnabled'], false),
       dualPageOffsetEnabled: _bool(values['dualPageOffsetEnabled'], false),
       immersiveEnabled: _bool(values['immersiveEnabled'], false),
       pageTurnAnimation: _enumFromName(
@@ -247,6 +248,7 @@ class ReaderPreferences {
     'customTextColorEnabled': customTextColorEnabled,
     'textColorValue': textColorValue,
     'dualPageEnabled': dualPageEnabled,
+    'centeredTextEnabled': centeredTextEnabled,
     'dualPageOffsetEnabled': dualPageOffsetEnabled,
     'immersiveEnabled': immersiveEnabled,
     'pageTurnAnimation': pageTurnAnimation.name,
@@ -264,6 +266,7 @@ class ReaderPreferences {
       other.customTextColorEnabled == customTextColorEnabled &&
       other.textColorValue == textColorValue &&
       other.dualPageEnabled == dualPageEnabled &&
+      other.centeredTextEnabled == centeredTextEnabled &&
       other.dualPageOffsetEnabled == dualPageOffsetEnabled &&
       other.immersiveEnabled == immersiveEnabled &&
       other.pageTurnAnimation == pageTurnAnimation &&
@@ -279,6 +282,7 @@ class ReaderPreferences {
     customTextColorEnabled,
     textColorValue,
     dualPageEnabled,
+    centeredTextEnabled,
     dualPageOffsetEnabled,
     immersiveEnabled,
     pageTurnAnimation,
@@ -555,7 +559,9 @@ class AppSettings {
       ),
       autoCheckUpdate: _bool(raw['autoCheckUpdate'], true),
       appBackground: BackgroundImagePreferences.decode(raw['appBackground']),
-      readerBackground: BackgroundImagePreferences.decode(raw['readerBackground']),
+      readerBackground: BackgroundImagePreferences.decode(
+        raw['readerBackground'],
+      ),
       syncBackgroundImages: _bool(raw['syncBackgroundImages'], false),
     );
   }

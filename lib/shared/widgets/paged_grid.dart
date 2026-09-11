@@ -110,7 +110,10 @@ class PagedGrid<T> extends StatelessWidget {
       onRefresh: onRefresh,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final layout = BookGridLayout.of(constraints.maxWidth);
+          final layout = BookGridLayout.of(
+            constraints.maxWidth,
+            textScaler: MediaQuery.textScalerOf(context),
+          );
           return PrefetchOnScroll(
             onLoadMore: _loadMore,
             child: CustomScrollView(
