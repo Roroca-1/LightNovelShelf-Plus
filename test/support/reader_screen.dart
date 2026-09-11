@@ -49,3 +49,11 @@ List<String> readerScreenSlots(WidgetTester tester, {int columns = 1}) {
   }
   return slots;
 }
+
+/// 在页边翻页，避免整页插图测试中的点击被图片预览处理。
+Future<void> tapReaderMargin(WidgetTester tester, {required bool next}) async {
+  final view = tester.getRect(find.byType(PageView).first);
+  await tester.tapAt(
+    Offset(next ? view.right - 2 : view.left + 2, view.center.dy),
+  );
+}

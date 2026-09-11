@@ -25,9 +25,9 @@ class BookGridLayout {
   final double mainAxisSpacing;
 
   static int columnsFor(double contentWidth) {
-    // 宽屏保留足够的封面宽度和留白，避免平板横屏挤进七八列。
+    // 宽屏封面最大 140 逻辑像素；窗口变宽时增加列数，不放大封面。
     if (contentWidth >= 600) {
-      return math.max(4, ((contentWidth + 24) / 204).floor());
+      return ((contentWidth + 24) / (140 + 24)).ceil();
     }
     if (contentWidth >= 480) return 4;
     return 3;
@@ -63,7 +63,8 @@ class BookGridLayout {
   int skeletonCount(double windowHeight, {double headerOffset = 110}) {
     final rows = math.max(
       1,
-      ((windowHeight - headerOffset) / (skeletonTileHeight + mainAxisSpacing)).ceil(),
+      ((windowHeight - headerOffset) / (skeletonTileHeight + mainAxisSpacing))
+          .ceil(),
     );
     return rows * columns;
   }

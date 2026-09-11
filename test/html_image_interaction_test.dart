@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -68,6 +69,34 @@ const _plainImage =
     '&amp;placeholder=$_hash">';
 
 void main() {
+  testWidgets('预览只在点击图片外空白时关闭，旋转缩放后仍正确命中', (tester) async {
+    await _pumpBlock(tester);
+    await tester.tap(find.byType(BookImage));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final photo = tester.widget<PhotoView>(find.byType(PhotoView));
+    void tap(Offset point) => photo.onTapUp!(
+      tester.element(find.byType(PhotoView)),
+      TapUpDetails(localPosition: point, kind: PointerDeviceKind.touch),
+      photo.controller!.value,
+    );
+    tap(const Offset(400, 300));
+    await tester.pump();
+    expect(find.byType(PhotoView), findsOneWidget);
+    // 原图 40x60，放大、旋转并平移后，中心仍是图内。
+    photo.controller!
+      ..scale = 15
+      ..rotation = math.pi / 2
+      ..position = const Offset(100, 0);
+    tap(const Offset(500, 300));
+    await tester.pump();
+    expect(find.byType(PhotoView), findsOneWidget);
+    tap(const Offset(10, 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(PhotoView), findsNothing);
+  });
+
   testWidgets('阅读器正文图片预留尺寸并使用 BlurHash，点击预览且不触发外层链接', (tester) async {
     final openedLinks = await _pumpBlock(tester);
 

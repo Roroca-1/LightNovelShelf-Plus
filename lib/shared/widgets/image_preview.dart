@@ -166,10 +166,10 @@ class ContentImage extends StatelessWidget {
   }
 }
 
-/// 预览的变换层，承载进入、退出、下拉的位移与缩放。
+/// 预览的变换层，承载进入、退出的位移与缩放。
 const Key imagePreviewTransformKey = Key('image-preview-transform');
 
-/// 全屏图片预览：从来源位置放大进入，退出时缩回原位，支持捏合缩放与下拉关闭。
+/// 全屏图片预览：从来源位置放大进入，退出时缩回原位，支持捏合缩放与点击空白关闭。
 ///
 /// [sourceRect] 是来源缩略图在屏幕上的矩形（[globalRectOf]），缺省时改用居中的淡入淡出加轻微缩放。
 Future<void> showImagePreview(
@@ -198,9 +198,6 @@ class _ImagePreview extends ConsumerStatefulWidget {
   final Rect? sourceRect;
   final Animation<double> animation;
 
-  /// 下拉关闭的位移阈值（逻辑像素），未达到则弹回。
-  static const double _dismissDistance = 120;
-
   @override
   ConsumerState<_ImagePreview> createState() => _ImagePreviewState();
 }
@@ -215,19 +212,6 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     curve: Curves.easeOutCubic,
     reverseCurve: Curves.easeInCubic,
   );
-
-  /// 松手后把拖拽位移弹回原位的控制器。
-  late final AnimationController _settle = AnimationController(
-    duration: const Duration(milliseconds: 220),
-    vsync: this,
-  )..addListener(_onSettle);
-  late final Animation<double> _settleCurve = CurvedAnimation(
-    parent: _settle,
-    curve: Curves.easeOutCubic,
-  );
-
-  Offset _drag = Offset.zero;
-  Offset _settleFrom = Offset.zero;
 
   /// 按钮旋转固定 90° 一档，动画期间同时改 rotation 和 scale，转完仍是整图可见。
   late final AnimationController _rotate = AnimationController(
@@ -264,7 +248,8 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
   void initState() {
     super.initState();
     _imageSize = contentImageMetadata(widget.url).size;
-    if (_imageSize == null) _listenImageSize();
+    // 图床尺寸变体可能比 URL 元数据小，缩放和命中最终以解码尺寸为准。
+    _listenImageSize();
   }
 
   void _listenImageSize() {
@@ -276,7 +261,8 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
           info.image.height.toDouble(),
         ),
       );
-    });
+      info.dispose();
+    }, onError: (_, _) {});
     _sizeListener = listener;
     _sizeStream = _provider.resolve(ImageConfiguration.empty)
       ..addListener(listener);
@@ -288,7 +274,6 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     if (listener != null) _sizeStream?.removeListener(listener);
     _rotate.dispose();
     _photo.dispose();
-    _settle.dispose();
     super.dispose();
   }
 
@@ -335,32 +320,22 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     if (mounted) setState(() => _running = null);
   }
 
-  void _onSettle() {
-    setState(() {
-      _drag = Offset.lerp(_settleFrom, Offset.zero, _settleCurve.value)!;
-    });
-  }
-
-  void _onDragStart(DragStartDetails _) {
-    _settle.stop();
-    _settleFrom = Offset.zero;
-  }
-
-  void _onDragUpdate(DragUpdateDetails details) {
-    setState(() => _drag += details.delta);
-  }
-
-  void _onDragEnd(DragEndDetails details) {
-    final velocity = details.velocity.pixelsPerSecond.dy;
-    final dismissed =
-        _drag.dy.abs() >= _ImagePreview._dismissDistance ||
-        velocity.abs() > 700;
-    if (dismissed) {
+  void _onPreviewTap(TapUpDetails details, Size viewport) {
+    final size = _imageSize;
+    if (size == null) return;
+    final scale = _photo.scale ?? _fitScale(viewport, _quarterTurns);
+    if (scale == null || scale <= 0) return;
+    // 把点击坐标反变换到原图坐标，旋转和拖动后也只响应图片外的空白。
+    final delta =
+        details.localPosition -
+        Offset(viewport.width / 2, viewport.height / 2) -
+        _photo.position;
+    final angle = -_photo.rotation;
+    final x = (delta.dx * math.cos(angle) - delta.dy * math.sin(angle)) / scale;
+    final y = (delta.dx * math.sin(angle) + delta.dy * math.cos(angle)) / scale;
+    if (x.abs() > size.width / 2 || y.abs() > size.height / 2) {
       Navigator.of(context).pop();
-      return;
     }
-    _settleFrom = _drag;
-    _settle.forward(from: 0);
   }
 
   /// 进入动画的缩放起点，按来源缩略图与屏幕的尺寸比算。
@@ -372,13 +347,11 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
         .clamp(0.05, 1.0);
   }
 
-  Matrix4 _transform(Size screen, double progress, double dragProgress) {
+  Matrix4 _transform(Size screen, double progress) {
     final center = Offset(screen.width / 2, screen.height / 2);
     final from = widget.sourceRect?.center ?? center;
-    final scale =
-        ui.lerpDouble(_beginScale(screen), 1, progress)! *
-        (1 - 0.2 * dragProgress);
-    final origin = Offset.lerp(from, center, progress)! + _drag;
+    final scale = ui.lerpDouble(_beginScale(screen), 1, progress)!;
+    final origin = Offset.lerp(from, center, progress)!;
     return Matrix4.translationValues(origin.dx, origin.dy, 0) *
         Matrix4.diagonal3Values(scale, scale, 1) *
         Matrix4.translationValues(-center.dx, -center.dy, 0);
@@ -388,29 +361,20 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
     final fit = _fitScale(screen, _quarterTurns);
-    final image = PhotoViewGestureDetectorScope(
-      axis: Axis.vertical,
-      child: GestureDetector(
-        onVerticalDragStart: _onDragStart,
-        onVerticalDragUpdate: _onDragUpdate,
-        onVerticalDragEnd: _onDragEnd,
-        child: PhotoView(
-          imageProvider: _provider,
-          controller: _photo,
-          backgroundDecoration: const BoxDecoration(color: Colors.transparent),
-          // 尺寸已知时按当前旋转角给出贴合缩放，否则退回 PhotoView 自己算的贴合值。
-          minScale: fit ?? PhotoViewComputedScale.contained,
-          maxScale: PhotoViewComputedScale.covered * 6,
-          onTapUp: (context, _, _) => Navigator.of(context).pop(),
-          loadingBuilder: (context, _) => const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
-          errorBuilder: (context, _, _) => const Center(
-            child: Text(
-              '图片加载失败',
-              style: TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
+    final image = PhotoView(
+      imageProvider: _provider,
+      controller: _photo,
+      backgroundDecoration: const BoxDecoration(color: Colors.transparent),
+      // 尺寸已知时按当前旋转角给出贴合缩放，否则退回 PhotoView 自己算的贴合值。
+      minScale: fit ?? PhotoViewComputedScale.contained,
+      maxScale: PhotoViewComputedScale.covered * 6,
+      onTapUp: (_, details, _) => _onPreviewTap(details, screen),
+      loadingBuilder: (context, _) =>
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+      errorBuilder: (context, _, _) => const Center(
+        child: Text(
+          '图片加载失败',
+          style: TextStyle(color: Colors.white, fontSize: 14),
         ),
       ),
     );
@@ -422,27 +386,17 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
         animation: _entry,
         builder: (context, child) {
           final progress = _entry.value.clamp(0.0, 1.0);
-          final dragProgress =
-              (_drag.distance / (_ImagePreview._dismissDistance * 2)).clamp(
-                0.0,
-                1.0,
-              );
-          final chromeOpacity = (progress * (1 - dragProgress)).clamp(0.0, 1.0);
+          final chromeOpacity = progress;
           return ColoredBox(
-            color: Colors.black.withValues(
-              alpha: 0.96 * progress * (1 - 0.55 * dragProgress),
-            ),
+            color: Colors.black.withValues(alpha: 0.96 * progress),
             child: Stack(
               children: <Widget>[
                 Positioned.fill(
                   child: Opacity(
-                    opacity: (progress * (1 - 0.35 * dragProgress)).clamp(
-                      0.0,
-                      1.0,
-                    ),
+                    opacity: progress,
                     child: Transform(
                       key: imagePreviewTransformKey,
-                      transform: _transform(screen, progress, dragProgress),
+                      transform: _transform(screen, progress),
                       child: child,
                     ),
                   ),

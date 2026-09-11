@@ -247,6 +247,34 @@ List<String> _screenSlots(WidgetTester tester, {int columns = 1}) =>
     readerScreenSlots(tester, columns: columns);
 
 void main() {
+  testWidgets('整页插图点击预览不翻页，关闭后页边仍可翻页', (tester) async {
+    final harness = _Harness(blocks: _pageBlocks(2), paged: true);
+    await tester.pumpWidget(harness.build());
+    await tester.pumpAndSettle();
+    final page = harness.last.page;
+    await tester.tap(find.byType(BookImage).hitTestable().first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(imagePreviewTransformKey), findsOneWidget);
+    expect(harness.last.page, page);
+    expect(harness.centerTaps, 0);
+    // 预览覆盖整屏，边缘点击和横向滑动也不能传给阅读器。
+    await tester.tapAt(const Offset(798, 300));
+    await tester.drag(
+      find.byKey(imagePreviewTransformKey),
+      const Offset(-200, 0),
+    );
+    await tester.pump();
+    expect(harness.last.page, page);
+    expect(harness.centerTaps, 0);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tapReaderMargin(tester, next: true);
+    await tester.pumpAndSettle();
+    expect(harness.last.page, page + 1);
+  });
+
   testWidgets('无脚注 HTML 在滚动阅读、公告和社区共用同一渲染源', (tester) async {
     const html =
         '<div><p>甲</p><section><h2>标题</h2><p>乙</p></section></div>'
@@ -348,7 +376,7 @@ void main() {
     expect(harness.last.page, 1);
     expect(harness.last.locator, harness.blocks.first.locator);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(harness.last.page, 2);
@@ -475,7 +503,7 @@ void main() {
     expect(harness.blocks, hasLength(1));
     expect(harness.last.pages, greaterThan(2));
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     // 第二页的段落整体上移了页顶偏移，段顶的屏幕坐标为 12 减去该偏移。
@@ -501,7 +529,7 @@ void main() {
 
     final visible = tester.getSize(find.byKey(readerPageBodyKey(2, 0))).height;
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     final paragraph = find
         .descendant(of: find.byType(PageView), matching: find.byType(RichText))
@@ -523,7 +551,7 @@ void main() {
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 48),
     )..positions.addAll(harness.positions);
     await tester.pumpWidget(resized.build());
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -541,7 +569,7 @@ void main() {
     final harness = await _pump(tester);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     await spin(tester);
 
     // 上一章还没备好：这一屏摆加载栏，并请求第 1 章。
@@ -571,7 +599,7 @@ void main() {
     expect(harness.last.pages, greaterThan(1));
     while (harness.last.page < harness.last.pages) {
       final page = harness.last.page;
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
       expect(harness.last.page, page + 1);
     }
@@ -579,7 +607,7 @@ void main() {
     // 读到末页为止都不该去取下一章。
     expect(harness.needed, isEmpty);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await spin(tester);
 
     expect(harness.needed, <int>[3]);
@@ -601,10 +629,10 @@ void main() {
     final harness = await _pump(tester, count: 12, totalChapters: 2);
 
     while (harness.last.page < harness.last.pages) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
     }
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(harness.needed, isEmpty);
@@ -628,13 +656,13 @@ void main() {
     expect((harness.last.sortNum, harness.last.page), (2, 1));
     expect(harness.needed, isEmpty);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester), <String>['2-1']);
     expect((harness.last.sortNum, harness.last.page), (2, 2));
     expect(harness.needed, isEmpty);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await spin(tester);
     expect(_screenSlots(tester), <String>['…']);
     expect(harness.needed, <int>[3]);
@@ -660,7 +688,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_screenSlots(tester), <String>['2-0']);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(_screenSlots(tester), <String>['3-0']);
@@ -679,7 +707,7 @@ void main() {
     await tester.pumpWidget(harness.build());
     await tester.pumpAndSettle();
 
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
 
     expect(_screenSlots(tester), <String>['1-0']);
@@ -692,10 +720,10 @@ void main() {
     final harness = await _pump(tester, count: 12);
 
     while (harness.last.page < harness.last.pages) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
     }
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await spin(tester);
     expect(harness.needed, <int>[3]);
 
@@ -712,8 +740,8 @@ void main() {
 
   testWidgets('按页顶 locator 恢复：回到同一页同一位置', (tester) async {
     final first = await _pump(tester);
-    await tester.tapAt(const Offset(700, 300));
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     final page = first.last.page;
     final locator = first.last.locator;
@@ -744,8 +772,8 @@ void main() {
 
   testWidgets('切换分页方式后仍钉在原来的 locator 上', (tester) async {
     final harness = await _pump(tester);
-    await tester.tapAt(const Offset(700, 300));
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     final locator = harness.last.locator;
 
@@ -821,10 +849,8 @@ void main() {
     final previewImage = firstImages.hitTestable().first;
     await tester.tap(previewImage);
     await tester.pump();
-    expect(find.byKey(imagePreviewTransformKey), findsNothing);
-
-    await tester.longPress(previewImage);
     await tester.pump(const Duration(milliseconds: 300));
+    expect(harness.centerTaps, 0);
     expect(find.byKey(imagePreviewTransformKey), findsOneWidget);
     Navigator.of(tester.element(find.byKey(imagePreviewTransformKey))).pop();
     await tester.pump();
@@ -974,12 +1000,12 @@ void main() {
     expect(harness.last.sortNum, 2);
 
     for (var page = 1; page < pages; page++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
     }
     expect(harness.last.page, pages);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(harness.boundaries, isEmpty);
@@ -1002,7 +1028,7 @@ void main() {
   testWidgets('滑动跨章：一次拖拽直接翻进下一章', (tester) async {
     final harness = await _pump(tester, count: 12, next: _chapter(3));
     for (var page = 1; page < harness.last.pages; page++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
     }
 
@@ -1019,7 +1045,7 @@ void main() {
     final harness = await _pump(tester, count: 12, previous: _chapter(1));
     expect(harness.last.page, 1);
 
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
 
     expect(harness.boundaries, isEmpty);
@@ -1031,7 +1057,7 @@ void main() {
 
   testWidgets('上一章半路接进翻页条：当前页不动，往前翻不再交给上层', (tester) async {
     final harness = await _pump(tester, count: 12);
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     final page = harness.last.page;
     final locator = harness.last.locator;
@@ -1047,9 +1073,9 @@ void main() {
     // 换控制器时页序整体后移，渲染的仍须是本章同一页。
     expect(find.byKey(readerPageBodyKey(2, 1)), findsOneWidget);
 
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
 
     expect(harness.boundaries, isEmpty);
@@ -1139,7 +1165,7 @@ void main() {
     expect(find.byKey(readerPageBodyKey(2, 2)), findsNothing);
 
     // 翻一屏走两栏。
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
 
     expect(harness.last.page, 3);
@@ -1252,7 +1278,7 @@ void main() {
     expect(harness.needed, <int>[3]);
     harness.needed.clear();
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await spin(tester);
 
     // 两栏都空：左栏转圈，请求第 4 章。
@@ -1282,7 +1308,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(harness.needed, isEmpty);
 
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await spin(tester);
 
     // 条前的加载栏补满一屏，转圈的是紧挨着正文的右栏。
@@ -1353,12 +1379,12 @@ void main() {
     expect(harness.needed, <int>[2]);
     harness.needed.clear();
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['3-0', '4-0']);
     expect((harness.last.sortNum, harness.last.page), (3, 1));
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['4-1', '']);
     expect((harness.last.sortNum, harness.last.page), (4, 2));
@@ -1366,11 +1392,11 @@ void main() {
     expect(harness.needed, isEmpty);
 
     // 原路翻回去，每一屏都还是原来那两栏。
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['3-0', '4-0']);
 
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['1-0', '2-0']);
     expect((harness.last.sortNum, harness.last.page), (1, 1));
@@ -1392,9 +1418,9 @@ void main() {
     await tester.pumpWidget(harness.build());
     await tester.pumpAndSettle();
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await spin(tester);
     expect(_screenSlots(tester, columns: 2), <String>['4-1', '…']);
     harness.shiftTo(4);
@@ -1436,13 +1462,13 @@ void main() {
     expect(_screenSlots(tester, columns: 2), <String>['1-0', '1-1']);
     expect((harness.last.sortNum, harness.last.page), (1, 1));
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['2-0', '3-0']);
     expect((harness.last.sortNum, harness.last.page), (2, 1));
     expect(harness.chapterChanges, <int>[2]);
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['3-1', '']);
     expect((harness.last.sortNum, harness.last.page), (3, 2));
@@ -1462,7 +1488,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['2-0', '2-1']);
 
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await spin(tester);
 
     // 加载栏只在紧挨着翻页条的右栏上转，左栏留白。
@@ -1494,7 +1520,7 @@ void main() {
     );
     await tester.pumpWidget(harness.build());
     await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await tester.pumpAndSettle();
     expect(_screenSlots(tester, columns: 2), <String>['2-0', '3-0']);
 
@@ -1528,7 +1554,7 @@ void main() {
     expect(harness.needed, isEmpty);
 
     // 往前翻仍要转圈：上一章是有的。
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await spin(tester);
     expect(harness.needed, <int>[3]);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);

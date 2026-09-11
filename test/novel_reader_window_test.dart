@@ -270,10 +270,7 @@ void main() {
         .position;
     expect(current.pixels, closeTo(current.minScrollExtent, 0.5));
 
-    await tester.drag(
-      find.byType(Scrollable).last,
-      const Offset(0, 180),
-    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 180));
     await _waitForChapter(tester, 1);
 
     final previous = tester
@@ -282,10 +279,7 @@ void main() {
     expect(previous.maxScrollExtent, greaterThan(0));
     expect(previous.pixels, closeTo(previous.maxScrollExtent, 0.5));
 
-    await tester.drag(
-      find.byType(Scrollable).last,
-      const Offset(0, -180),
-    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -180));
     await _waitForChapter(tester, 2);
 
     final next = tester
@@ -307,7 +301,7 @@ void main() {
     // 屏上摆着第 2 章，第 3 章也得提前备好，否则翻过去左栏就是加载栏。
     expect(api.requested.toSet(), <int>{1, 2, 3});
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await _spin(tester);
 
     // 左栏是备好的第 3 章，只有更外面的右栏可能还在转圈。
@@ -330,11 +324,11 @@ void main() {
     await _spin(tester, 40);
     expect(readerScreenSlots(tester, columns: 2), <String>['1-0', '2-0']);
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await _spin(tester, 40);
     expect(readerScreenSlots(tester, columns: 2), <String>['3-0', '4-0']);
 
-    await tester.tapAt(const Offset(1100, 400));
+    await tapReaderMargin(tester, next: true);
     await _spin(tester, 40);
     expect(readerScreenSlots(tester, columns: 2), <String>['4-1', '5-0']);
 
@@ -348,7 +342,7 @@ void main() {
     );
 
     // 再翻回去，还是原来那两屏。
-    await tester.tapAt(const Offset(100, 400));
+    await tapReaderMargin(tester, next: false);
     await _spin(tester, 40);
     expect(readerScreenSlots(tester, columns: 2), <String>['3-0', '4-0']);
   });
@@ -359,13 +353,13 @@ void main() {
 
     // 读到本章末页为止都不该去取下一章。
     for (var turn = 0; turn < 40; turn++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
       if (_pageText('第2章第11段').evaluate().isNotEmpty) break;
     }
     expect(api.requested, <int>[2]);
 
-    await tester.tapAt(const Offset(700, 300));
+    await tapReaderMargin(tester, next: true);
     await tester.pump();
     // 请求发出的那一刻正文换成加载栏。
     expect(api.requested, <int>[2, 3]);
@@ -435,7 +429,7 @@ void main() {
     expect(pages, greaterThan(1));
 
     for (var turn = 0; turn < 40; turn++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
       if (_pageText('第3章第0段').evaluate().isNotEmpty) break;
     }
@@ -455,7 +449,7 @@ void main() {
     expect(_pageText('第2章第0段'), findsWidgets);
 
     for (var turn = 0; turn < 40; turn++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       await tester.pumpAndSettle();
       if (_pageText('第3章第0段').evaluate().isNotEmpty) break;
     }
@@ -482,7 +476,7 @@ void main() {
 
     record();
     for (var turn = 0; turn < 12; turn++) {
-      await tester.tapAt(const Offset(700, 300));
+      await tapReaderMargin(tester, next: true);
       for (var frame = 0; frame < 40; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
         record();
@@ -511,7 +505,7 @@ void main() {
     }
 
     record();
-    await tester.tapAt(const Offset(100, 300));
+    await tapReaderMargin(tester, next: false);
     for (var frame = 0; frame < 60; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
       record();
