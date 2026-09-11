@@ -7,6 +7,8 @@ class BookGridLayout {
     required this.columns,
     required this.tileWidth,
     required this.contentWidth,
+    this.crossAxisSpacing = columnGap,
+    this.mainAxisSpacing = rowGap,
   });
 
   static const double columnGap = 10;
@@ -19,12 +21,14 @@ class BookGridLayout {
   final int columns;
   final double tileWidth;
   final double contentWidth;
+  final double crossAxisSpacing;
+  final double mainAxisSpacing;
 
   static int columnsFor(double contentWidth) {
-    if (contentWidth >= 1280) return 8;
-    if (contentWidth >= 1024) return 7;
-    if (contentWidth >= 768) return 6;
-    if (contentWidth >= 600) return 5;
+    // 宽屏保留足够的封面宽度和留白，避免平板横屏挤进七八列。
+    if (contentWidth >= 600) {
+      return math.max(4, ((contentWidth + 24) / 204).floor());
+    }
     if (contentWidth >= 480) return 4;
     return 3;
   }
@@ -35,12 +39,15 @@ class BookGridLayout {
   }) {
     final contentWidth = math.max(1.0, windowWidth - 2 * horizontalPadding);
     final columns = columnsFor(contentWidth);
-    final tileWidth = ((contentWidth - (columns - 1) * columnGap) / columns)
+    final gap = contentWidth >= 600 ? 24.0 : columnGap;
+    final tileWidth = ((contentWidth - (columns - 1) * gap) / columns)
         .floorToDouble();
     return BookGridLayout(
       columns: columns,
       tileWidth: tileWidth,
       contentWidth: contentWidth,
+      crossAxisSpacing: gap,
+      mainAxisSpacing: contentWidth >= 600 ? 24 : rowGap,
     );
   }
 
@@ -56,7 +63,7 @@ class BookGridLayout {
   int skeletonCount(double windowHeight, {double headerOffset = 110}) {
     final rows = math.max(
       1,
-      ((windowHeight - headerOffset) / (skeletonTileHeight + rowGap)).ceil(),
+      ((windowHeight - headerOffset) / (skeletonTileHeight + mainAxisSpacing)).ceil(),
     );
     return rows * columns;
   }
@@ -71,8 +78,8 @@ class BookGridLayout {
   SliverGridDelegate tileGridDelegate({double? mainAxisSpacing}) =>
       SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        crossAxisSpacing: BookGridLayout.columnGap,
-        mainAxisSpacing: mainAxisSpacing ?? BookGridLayout.rowGap,
+        crossAxisSpacing: crossAxisSpacing,
+        mainAxisSpacing: mainAxisSpacing ?? this.mainAxisSpacing,
         mainAxisExtent: tileHeight,
       );
 
@@ -80,8 +87,8 @@ class BookGridLayout {
   SliverGridDelegate skeletonGridDelegate({double? mainAxisSpacing}) =>
       SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        crossAxisSpacing: BookGridLayout.columnGap,
-        mainAxisSpacing: mainAxisSpacing ?? BookGridLayout.rowGap,
+        crossAxisSpacing: crossAxisSpacing,
+        mainAxisSpacing: mainAxisSpacing ?? this.mainAxisSpacing,
         childAspectRatio: tileWidth / skeletonTileHeight,
       );
 }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,9 +47,18 @@ class DiscoverScreen extends ConsumerWidget {
               ),
             ],
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-            sliver: SliverList(delegate: _sectionDelegate),
+          SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.crossAxisExtent;
+              final padding = math.max(
+                width >= 600 ? 32.0 : 20.0,
+                (width - 1200) / 2,
+              );
+              return SliverPadding(
+                padding: EdgeInsets.fromLTRB(padding, 4, padding, 32),
+                sliver: SliverList(delegate: _sectionDelegate),
+              );
+            },
           ),
         ],
       ),

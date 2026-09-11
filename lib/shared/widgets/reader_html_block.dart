@@ -317,6 +317,7 @@ class _ReaderBlockImageState extends State<_ReaderBlockImage> {
             ? SizedBox(width: width, height: height)
             : ContentImage(
                 url: widget.url,
+                trigger: ImagePreviewTrigger.tap,
                 width: width,
                 height: height,
                 blurHash: widget.blurHash,

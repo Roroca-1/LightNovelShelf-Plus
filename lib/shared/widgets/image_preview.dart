@@ -158,9 +158,7 @@ class ContentImage extends StatelessWidget {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: trigger == ImagePreviewTrigger.tap ? preview : null,
-          onLongPress: trigger == ImagePreviewTrigger.longPress
-              ? preview
-              : null,
+          onLongPress: preview,
           child: image,
         );
       },

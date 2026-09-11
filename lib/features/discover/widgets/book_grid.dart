@@ -104,7 +104,7 @@ Widget _gridRows({
     final cells = <Widget>[];
     for (var column = 0; column < layout.columns; column++) {
       if (column > 0) {
-        cells.add(const SizedBox(width: BookGridLayout.columnGap));
+        cells.add(SizedBox(width: layout.crossAxisSpacing));
       }
       final index = start + column;
       cells.add(
@@ -115,7 +115,7 @@ Widget _gridRows({
       );
     }
     if (rows.isNotEmpty) {
-      rows.add(const SizedBox(height: BookGridLayout.rowGap));
+      rows.add(SizedBox(height: layout.mainAxisSpacing));
     }
     rows.add(
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),

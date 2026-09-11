@@ -68,7 +68,7 @@ const _plainImage =
     '&amp;placeholder=$_hash">';
 
 void main() {
-  testWidgets('阅读器正文图片预留尺寸并使用 BlurHash，长按预览，短按仍走链接', (tester) async {
+  testWidgets('阅读器正文图片预留尺寸并使用 BlurHash，点击预览且不触发外层链接', (tester) async {
     final openedLinks = await _pumpBlock(tester);
 
     final image = find.byType(BookImage);
@@ -78,13 +78,10 @@ void main() {
 
     await tester.tap(image);
     await tester.pump();
-    expect(openedLinks(), 1);
-    expect(find.byKey(imagePreviewTransformKey), findsNothing);
-
-    await tester.longPress(image);
+    expect(openedLinks(), 0);
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byKey(imagePreviewTransformKey), findsOneWidget);
-    expect(openedLinks(), 1);
+    expect(openedLinks(), 0);
   });
 
   testWidgets('预览请求的地址与显示的一致，命中同一份缓存', (tester) async {
