@@ -486,6 +486,15 @@ class ReaderSettingsContent extends ConsumerWidget {
                   (reader) => reader.copyWith(dualPageEnabled: value),
                 ),
               ),
+              SettingsToggleRow(
+                title: '正文居中',
+                description: '单栏阅读时限制为约 32 个字符宽并居中；双页不受影响',
+                icon: Icons.format_align_center,
+                value: reader.centeredTextEnabled,
+                onChanged: (value) => updateReader(
+                  (reader) => reader.copyWith(centeredTextEnabled: value),
+                ),
+              ),
               if (comic)
                 SettingsToggleRow(
                   title: '错位双页',

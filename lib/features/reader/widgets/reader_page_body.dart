@@ -21,6 +21,7 @@ class ReaderPageBody extends StatelessWidget {
     required this.index,
     required this.viewport,
     required this.padding,
+    required this.contentWidth,
   });
 
   final int sortNum;
@@ -36,6 +37,9 @@ class ReaderPageBody extends StatelessWidget {
   final int index;
   final Size viewport;
   final EdgeInsets padding;
+
+  /// 与测量层一致的正文列宽；窄于页面时在页面中央摆放。
+  final double contentWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +61,10 @@ class ReaderPageBody extends StatelessWidget {
     return Padding(
       padding: padding,
       child: Align(
-        alignment: Alignment.topLeft,
+        alignment: Alignment.topCenter,
         child: SizedBox(
           key: readerPageBodyKey(sortNum, index),
-          width: double.infinity,
+          width: contentWidth,
           height: math.min(viewport.height, math.max(0, bottom - top)),
           child: ClipRect(
             child: Stack(
