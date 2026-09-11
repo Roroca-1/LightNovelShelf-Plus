@@ -12,11 +12,11 @@ void main() {
     expect(large.tileHeight - regular.tileHeight, 32);
   });
 
-  test('手机保留三列，平板和桌面增加列数并缩小封面', () {
+  test('手机保留三列，平板和桌面保持舒适封面尺寸', () {
     expect(BookGridLayout.of(390).columns, 3);
-    expect(BookGridLayout.of(800).columns, 5);
-    expect(BookGridLayout.of(1100).columns, 7);
-    expect(BookGridLayout.of(1280).columns, 8);
+    expect(BookGridLayout.of(800).columns, 4);
+    expect(BookGridLayout.of(1100).columns, 5);
+    expect(BookGridLayout.of(1280).columns, 6);
   });
 
   test('调整窗口宽度后卡片不会溢出，骨架与正文横向对齐', () {
@@ -34,8 +34,8 @@ void main() {
       final layout = BookGridLayout.of(width);
       expect(layout.tileWidth, greaterThan(0));
       if (layout.contentWidth >= 600) {
-        expect(layout.tileWidth, lessThanOrEqualTo(140));
-        expect(layout.coverHeight, lessThanOrEqualTo(210));
+        expect(layout.tileWidth, greaterThanOrEqualTo(120));
+        expect(layout.coverHeight, greaterThanOrEqualTo(180));
       }
       expect(
         layout.columns * layout.tileWidth +

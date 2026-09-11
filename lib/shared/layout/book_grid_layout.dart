@@ -30,9 +30,10 @@ class BookGridLayout {
   final double titleHeight;
 
   static int columnsFor(double contentWidth) {
-    // 宽屏封面最大 140 逻辑像素；窗口变宽时增加列数，不放大封面。
+    // 宽屏维持舒适的封面尺寸；额外空间通过增加列数利用全宽，而非把
+    // 封面压到很小，确保书架视觉与卡片点击区域保持一致。
     if (contentWidth >= 600) {
-      return ((contentWidth + 24) / (140 + 24)).ceil();
+      return math.max(4, ((contentWidth + 24) / 204).floor());
     }
     if (contentWidth >= 480) return 4;
     return 3;
