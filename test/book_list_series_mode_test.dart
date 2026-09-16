@@ -65,7 +65,7 @@ class _FakeApi extends ApiClient {
             },
           ]),
         );
-      case 'GetBooksBySeries':
+      case 'GetBookListByTitle':
         return decode(_listPage(<Map<String, dynamic>>[_book(2, '系列甲 第一卷')]));
     }
     throw UnimplementedError(methodName);
@@ -173,11 +173,9 @@ void main() {
 
     expect(find.text('系列甲 第一卷'), findsOneWidget);
     final request = api.calls
-        .firstWhere((call) => call.$1 == 'GetBooksBySeries')
+        .firstWhere((call) => call.$1 == 'GetBookListByTitle')
         .$2;
-    expect(request['SeriesName'], '系列甲');
-    expect(request['Type'], 'Novel');
-    expect(request['Order'], 'latest');
+    expect(request['KeyWords'], '系列甲');
   });
 
   testWidgets('切回单本模式回到平铺列表', (tester) async {

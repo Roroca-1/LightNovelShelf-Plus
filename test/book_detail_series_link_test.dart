@@ -105,7 +105,7 @@ class _FakeApi extends ApiClient {
           throw const ApiError(_forbiddenMessage, ApiErrorCategory.server);
         }
         return decode(_detailResponse(bookType));
-      case 'GetBooksBySeries':
+      case 'GetBookListByTitle':
         return decode(<String, dynamic>{
           'Page': 1,
           'TotalPages': 1,
@@ -113,7 +113,7 @@ class _FakeApi extends ApiClient {
             <String, dynamic>{
               'Id': 7,
               'Type': 'Novel',
-              'Title': '同系列的另一本',
+          'Title': '某本小说 第二卷',
               'Cover': 'https://img.test/7.jpg',
               'UserName': '上传者',
               'LastUpdatedAt': '2026-01-01T00:00:00Z',
@@ -204,9 +204,9 @@ void main() {
     expect(find.byType(NovelSeriesBooksScreen), findsOneWidget);
     expect(find.text('同系列的另一本'), findsOneWidget);
     final request = opened.api.calls
-        .firstWhere((call) => call.$1 == 'GetBooksBySeries')
+        .firstWhere((call) => call.$1 == 'GetBookListByTitle')
         .$2;
-    expect(request['SeriesName'], '中文系列');
+    expect(request['KeyWords'], '某本小说');
   });
 
   testWidgets('小说详情从菜单打开系列切换', (tester) async {
