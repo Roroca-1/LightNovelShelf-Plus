@@ -243,7 +243,7 @@ void main() {
   testWidgets('无权访问的书籍在错误页上留返回入口，桌面端能退回上一页', (tester) async {
     await _open(
       tester,
-      initialLocation: '/books/series?name=%E4%B8%AD%E6%96%87%E7%B3%BB%E5%88%97&order=latest',
+      initialLocation: '/books/series?name=%E6%9F%90%E6%9C%AC%E5%B0%8F%E8%AF%B4&order=latest',
       forbidBookInfo: true,
     );
 
@@ -266,7 +266,7 @@ void main() {
   testWidgets('无权访问不重试，详情页直接给出服务端文案', (tester) async {
     final opened = await _open(
       tester,
-      initialLocation: '/books/series?name=%E4%B8%AD%E6%96%87%E7%B3%BB%E5%88%97&order=latest',
+      initialLocation: '/books/series?name=%E6%9F%90%E6%9C%AC%E5%B0%8F%E8%AF%B4&order=latest',
       forbidBookInfo: true,
     );
 
