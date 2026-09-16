@@ -23,20 +23,20 @@ class ServerSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Card(
-            child: Column(
+            child: RadioGroup<ApiServer>(
+              groupValue: selected,
+              onChanged: (value) => controller.update(
+                (settings) => settings.copyWith(apiServer: value),
+              ),
+              child: Column(
               children: ApiServer.values.map((server) {
                 return RadioListTile<ApiServer>(
                   value: server,
-                  groupValue: selected,
                   title: Text(server.label),
                   subtitle: Text(server.apiOrigin),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    controller.update((settings) =>
-                        settings.copyWith(apiServer: value));
-                  },
                 );
               }).toList(growable: false),
+              ),
             ),
           ),
         ],

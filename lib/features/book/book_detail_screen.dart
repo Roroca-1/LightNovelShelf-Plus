@@ -10,6 +10,7 @@ import '../../data/api/models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/read_position_cache.dart';
 import '../../shared/format.dart';
+import '../../shared/series_title.dart';
 import '../../shared/widgets/app_dialogs.dart';
 import '../../shared/widgets/state_views.dart';
 import '../../shared/widgets/user_card_sheet.dart';
@@ -38,12 +39,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   int get _request => widget.id;
 
   String _seriesTitleOf(BookDetailBundle bundle) {
-    final title = bundle.detail.seriesTitle.trim();
-    if (title.isNotEmpty) return title;
-    final classification = bundle.detail.classification;
-    return classification.seriesNameCn ??
-        classification.seriesName ??
-        bundle.detail.title;
+    return seriesTitleFromBookTitle(bundle.detail.title);
   }
 
   void _openSeries(BookDetailBundle bundle) {
