@@ -17,7 +17,7 @@ import 'package:lightnovel_shelf_plus/features/book/book_detail_screen.dart';
 import 'package:lightnovel_shelf_plus/features/book/book_providers.dart';
 import 'package:lightnovel_shelf_plus/features/discover/novel_series_books_screen.dart';
 
-/// 详情页系列切换使用服务端返回的 `Series`。
+/// 详情页系列切换使用书名去卷号后的标题检索。
 const int _bookId = 42;
 const String _bookTitle = '某本小说 第一卷';
 
@@ -202,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NovelSeriesBooksScreen), findsOneWidget);
-    expect(find.text('同系列的另一本'), findsOneWidget);
+    expect(find.text('某本小说 第二卷'), findsOneWidget);
     final request = opened.api.calls
         .firstWhere((call) => call.$1 == 'GetBookListByTitle')
         .$2;
@@ -247,7 +247,7 @@ void main() {
       forbidBookInfo: true,
     );
 
-    await tester.tap(find.text('同系列的另一本'));
+    await tester.tap(find.text('某本小说 第二卷'));
     await tester.pumpAndSettle();
     expect(find.byType(BookDetailScreen), findsOneWidget);
 
@@ -270,7 +270,7 @@ void main() {
       forbidBookInfo: true,
     );
 
-    await tester.tap(find.text('同系列的另一本'));
+    await tester.tap(find.text('某本小说 第二卷'));
     await tester.pumpAndSettle();
 
     expect(find.text('无法加载这本书'), findsOneWidget);
