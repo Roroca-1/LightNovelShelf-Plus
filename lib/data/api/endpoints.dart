@@ -15,7 +15,7 @@ class ServiceEndpoints {
   static const String sendResetEmailPath = '/api/user/send_reset_email';
   static const String resetPasswordPath = '/api/user/reset_password';
   static const String refreshTokenPath = '/api/user/refresh_token';
-  static const String signalRHub = '$apiOrigin/hub/api';
+  static String signalRHubFor(String apiOrigin) => '$apiOrigin/hub/api';
 }
 
 /// 书架结构版本号。

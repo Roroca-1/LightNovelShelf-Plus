@@ -169,6 +169,11 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
         loading = false;
       });
       _syncWindow();
+      if (prepared.fontWarning != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(prepared.fontWarning!)),
+        );
+      }
     } catch (failure) {
       if (isStale(version)) return;
       setState(() {

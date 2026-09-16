@@ -35,6 +35,12 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.palette_outlined,
             onTap: () => context.push('/settings/appearance'),
           ),
+          SettingsNavigationRow(
+            title: '服务器节点',
+            description: '切换 hk 或 cloudflare 内容服务',
+            icon: Icons.dns_outlined,
+            onTap: () => context.push('/settings/server'),
+          ),
         ],
       ),
       SettingsSection(

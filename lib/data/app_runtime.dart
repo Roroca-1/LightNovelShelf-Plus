@@ -45,6 +45,7 @@ class AppRuntime {
       }
     }
     final scheduler = RateLimitRequestScheduler();
+    final apiOrigin = settings.settings.apiServer.apiOrigin;
 
     final userAgent = await _backendUserAgent();
     final visitor = VisitorId(credentials: credentials);
@@ -55,13 +56,14 @@ class AppRuntime {
     };
 
     final signalR = SignalRConnection(
-      endpoint: ServiceEndpoints.signalRHub,
+      endpoint: ServiceEndpoints.signalRHubFor(apiOrigin),
       accessTokenFactory: () =>
           credentials.read(AuthCredentialKeys.sessionToken),
       headersFactory: backendHeaders,
     );
 
     final api = ApiClient(
+      apiOrigin: apiOrigin,
       signalR: signalR,
       scheduler: scheduler,
       headers: () async {

@@ -18,12 +18,14 @@ class ReaderPreparedChapter {
     required this.blocks,
     required this.notes,
     required this.fontFamily,
+    this.fontWarning,
   });
 
   final NovelContent content;
   final List<ReaderBlock> blocks;
   final Map<String, String> notes;
   final String? fontFamily;
+  final String? fontWarning;
 
   NovelChapterContent get chapter => content.chapter;
   int get sortNum => content.chapter.sortNum;
@@ -155,17 +157,28 @@ class ReaderChapterPrerenderer {
         priority: priority,
         cancelToken: entry.token,
       );
-      final fontFamily = await _fonts.loadFamily(
-        content.chapter.fontUrl,
-        cacheEnabled: fontCacheEnabled,
-        cacheLimit: fontCacheLimit,
-      );
+      String? fontFamily;
+      String? fontWarning;
+      try {
+        fontFamily = await _fonts.loadFamily(
+          content.chapter.fontUrl,
+          cacheEnabled: fontCacheEnabled,
+          cacheLimit: fontCacheLimit,
+          cancelToken: entry.token,
+        );
+      } on RequestCancelledError {
+        rethrow;
+      } catch (_) {
+        // 字体服务偶发失败时仍显示已取回的章节，避免把可恢复问题报成整章失败。
+        fontWarning = '章节字体加载失败，已显示正文；重试章节可恢复正常字形。';
+      }
       final markup = await _buildChapterMarkup(content.chapter.content);
       final prepared = ReaderPreparedChapter(
         content: content,
         blocks: markup.blocks,
         notes: markup.notes,
         fontFamily: fontFamily,
+        fontWarning: fontWarning,
       );
       if (content.chapter.bookId == _bookId &&
           content.chapter.sortNum == key.$1) {

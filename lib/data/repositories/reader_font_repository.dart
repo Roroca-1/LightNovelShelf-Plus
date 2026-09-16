@@ -5,17 +5,19 @@ import 'dart:typed_data';
 import 'dart:ui' show loadFontFromList;
 
 import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 // woff2.dart 的 @Native assetId 与 hook/build.dart 里的条目都写死了这个库路径，挪走要同步改原生构建，故留在 features 下。
 import '../../features/reader/woff2.dart';
-import '../api/endpoints.dart';
+import '../api/api_client.dart';
+import '../../core/network/request_scheduler.dart';
 
 /// 章节字体缓存。正文字形被服务端混淆，需配套字体才能正确显示；WOFF2 先经
 /// libwoff2 转成 TTF 再注册进 Flutter 引擎，正文按族名排版。
 class ReaderFontRepository {
-  const ReaderFontRepository();
+  const ReaderFontRepository(this._api);
+
+  final ApiClient _api;
 
   static const String _directoryName = 'reader-fonts';
   // 引擎的字体注册无法撤销，去重状态与实例无关，只能挂在进程上。
@@ -24,13 +26,13 @@ class ReaderFontRepository {
   static final Set<String> _registered = <String>{};
 
   /// 相对地址按 API 源站补全；空地址表示该章节不用字体。
-  static String? resolveFontUrl(String? fontUrl) {
+  String? resolveFontUrl(String? fontUrl) {
     final value = fontUrl?.trim() ?? '';
     if (value.isEmpty) return null;
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return value;
     }
-    return '${ServiceEndpoints.apiOrigin}${value.startsWith('/') ? '' : '/'}$value';
+    return '${_api.apiOrigin}${value.startsWith('/') ? '' : '/'}$value';
   }
 
   /// 返回已注册到 Flutter 引擎的字体族名。
@@ -39,6 +41,7 @@ class ReaderFontRepository {
     String? fontUrl, {
     bool cacheEnabled = true,
     int cacheLimit = 30,
+    CancelToken? cancelToken,
   }) {
     final url = resolveFontUrl(fontUrl);
     if (url == null) return Future<String?>.value();
@@ -58,6 +61,7 @@ class ReaderFontRepository {
           family: family,
           cacheEnabled: cacheEnabled,
           cacheLimit: cacheLimit,
+          cancelToken: cancelToken,
         ).whenComplete(() {
           _inflight.remove(url);
         });
@@ -65,12 +69,13 @@ class ReaderFontRepository {
     return request;
   }
 
-  static Future<String> _load(
+  Future<String> _load(
     String url, {
     required String digest,
     required String family,
     required bool cacheEnabled,
     required int cacheLimit,
+    CancelToken? cancelToken,
   }) async {
     final file = cacheEnabled ? await _cacheFile(digest) : null;
     if (file != null && file.existsSync()) {
@@ -86,14 +91,9 @@ class ReaderFontRepository {
       await file.delete();
     }
 
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException(
-        '章节字体下载失败（${response.statusCode}）。',
-        uri: Uri.parse(url),
-      );
-    }
-    final bytes = await _prepare(response.bodyBytes);
+    final bytes = await _prepare(
+      Uint8List.fromList(await _api.downloadBytes(Uri.parse(url), cancelToken: cancelToken)),
+    );
     if (!_isEngineFont(bytes)) throw const FormatException('章节字体格式无法识别。');
 
     if (file != null) {

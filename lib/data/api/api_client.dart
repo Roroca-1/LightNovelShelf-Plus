@@ -6,7 +6,6 @@ import '../../core/network/api_error.dart';
 import '../../core/network/request_scheduler.dart';
 import '../../core/network/signalr_connection.dart';
 import 'decode.dart';
-import 'endpoints.dart';
 import 'envelope.dart';
 
 // 端点按领域拆成 extension，在此统一导出。
@@ -44,6 +43,7 @@ class SessionTokens {
 
 class ApiClient {
   ApiClient({
+    required this.apiOrigin,
     required SignalRConnection signalR,
     required RateLimitRequestScheduler scheduler,
     required Future<Map<String, String>> Function() headers,
@@ -54,6 +54,8 @@ class ApiClient {
 
   /// 服务端对批量取书的数量上限。
   static const int batchIdLimit = 24;
+
+  final String apiOrigin;
 
   final SignalRConnection _signalR;
   final RateLimitRequestScheduler _scheduler;
@@ -104,7 +106,7 @@ class ApiClient {
     Map<String, String>? query,
     Object? body,
   }) async {
-    final uri = Uri.parse('${ServiceEndpoints.apiOrigin}$path')
+    final uri = Uri.parse('$apiOrigin$path')
         .replace(queryParameters: query);
     final headers = <String, String>{
       'Accept': 'application/json',
@@ -124,6 +126,22 @@ class ApiClient {
         client.close();
       }
     });
+  }
+
+  /// 供章节字体等二进制资源使用，保留应用身份头、限流与超时约束。
+  Future<List<int>> downloadBytes(Uri uri, {CancelToken? cancelToken}) async {
+    return _scheduler.add(() async {
+      final client = http.Client();
+      try {
+        final response = await client
+            .get(uri, headers: await _headers())
+            .timeout(const Duration(seconds: 20));
+        ensureOk(response, '下载资源失败。');
+        return response.bodyBytes;
+      } finally {
+        client.close();
+      }
+    }, cancelToken: cancelToken);
   }
 
   Object? decodeHttpBody(http.Response response) {

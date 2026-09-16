@@ -47,6 +47,7 @@ import '../features/settings/content_settings_screen.dart';
 import '../features/settings/profile_screen.dart';
 import '../features/settings/reader_settings_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/settings/server_settings_screen.dart';
 import '../features/shelf/shelf_screen.dart';
 import 'home_shell.dart';
 
@@ -301,6 +302,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'content',
             builder: (_, _) => const ContentSettingsScreen(),
+          ),
+          GoRoute(
+            path: 'server',
+            builder: (_, _) => const ServerSettingsScreen(),
           ),
           GoRoute(
             path: 'reader/novel',

@@ -1,4 +1,5 @@
 import '../../core/network/request_scheduler.dart';
+import '../../core/network/api_error.dart';
 import 'api_client.dart';
 import 'models.dart';
 
@@ -113,13 +114,38 @@ extension ApiClientCatalog on ApiClient {
     String? convert,
     RequestPriority priority = RequestPriority.interactive,
     CancelToken? cancelToken,
-  }) => invoke(
-    'GetNovelContent',
-    <String, Object?>{'Bid': bookId, 'SortNum': sortNum, 'Convert': ?convert},
-    NovelContent.decode,
-    priority: priority,
+  }) => _retryChapterRequest(
+    () => invoke(
+      'GetNovelContent',
+      <String, Object?>{'Bid': bookId, 'SortNum': sortNum, 'Convert': ?convert},
+      NovelContent.decode,
+      priority: priority,
+      cancelToken: cancelToken,
+    ),
     cancelToken: cancelToken,
   );
+
+  Future<T> _retryChapterRequest<T>(
+    Future<T> Function() request, {
+    CancelToken? cancelToken,
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await request();
+      } on RequestCancelledError {
+        rethrow;
+      } catch (error) {
+        final apiError = toApiError(error);
+        final retryable = apiError.category == ApiErrorCategory.network ||
+            (apiError.category == ApiErrorCategory.server &&
+                const <int>{429, 502, 503, 504}.contains(apiError.status));
+        if (!retryable || attempt >= 1 || (cancelToken?.isCancelled ?? false)) {
+          throw apiError;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
+    }
+  }
 
   Future<ComicContent> getComicContent({
     required int chapterId,

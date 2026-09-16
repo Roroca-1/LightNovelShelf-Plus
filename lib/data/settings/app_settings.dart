@@ -42,6 +42,21 @@ enum ShelfSortSetting {
 
 enum ReaderFontSetting { system, serif, sansSerif, monospace, custom }
 
+/// 与网页版一致的 API 节点。网页入口域名只承载前端，实际内容请求走这里。
+enum ApiServer { hk, cloudflare }
+
+extension ApiServerEndpoint on ApiServer {
+  String get apiOrigin => switch (this) {
+    ApiServer.hk => 'https://api.lightnovel.life',
+    ApiServer.cloudflare => 'https://cf-api.lightnovel.life',
+  };
+
+  String get label => switch (this) {
+    ApiServer.hk => 'hk',
+    ApiServer.cloudflare => 'cloudflare',
+  };
+}
+
 @immutable
 class BackgroundImagePreferences {
   const BackgroundImagePreferences({
@@ -339,6 +354,7 @@ class AppSettings {
     this.appBackground = const BackgroundImagePreferences(),
     this.readerBackground = const BackgroundImagePreferences(brightness: 1),
     this.syncBackgroundImages = false,
+    this.apiServer = ApiServer.hk,
   });
 
   final bool bookDetailCacheEnabled;
@@ -380,6 +396,7 @@ class AppSettings {
   final BackgroundImagePreferences appBackground;
   final BackgroundImagePreferences readerBackground;
   final bool syncBackgroundImages;
+  final ApiServer apiServer;
 
   AppSettings copyWith({
     bool? bookDetailCacheEnabled,
@@ -421,6 +438,7 @@ class AppSettings {
     BackgroundImagePreferences? appBackground,
     BackgroundImagePreferences? readerBackground,
     bool? syncBackgroundImages,
+    ApiServer? apiServer,
   }) => AppSettings(
     bookDetailCacheEnabled:
         bookDetailCacheEnabled ?? this.bookDetailCacheEnabled,
@@ -464,6 +482,7 @@ class AppSettings {
     appBackground: appBackground ?? this.appBackground,
     readerBackground: readerBackground ?? this.readerBackground,
     syncBackgroundImages: syncBackgroundImages ?? this.syncBackgroundImages,
+    apiServer: apiServer ?? this.apiServer,
   );
 
   static final RegExp _hexPattern = RegExp(r'^#[0-9A-Fa-f]{6}$');
@@ -563,6 +582,7 @@ class AppSettings {
         raw['readerBackground'],
       ),
       syncBackgroundImages: _bool(raw['syncBackgroundImages'], false),
+      apiServer: _enumFromName(ApiServer.values, raw['apiServer'], ApiServer.hk),
     );
   }
 
@@ -608,6 +628,7 @@ class AppSettings {
     'appBackground': appBackground.encode(),
     'readerBackground': readerBackground.encode(),
     'syncBackgroundImages': syncBackgroundImages,
+    'apiServer': apiServer.name,
   };
 
   @override
@@ -649,7 +670,8 @@ class AppSettings {
       other.autoCheckUpdate == autoCheckUpdate &&
       other.appBackground == appBackground &&
       other.readerBackground == readerBackground &&
-      other.syncBackgroundImages == syncBackgroundImages;
+      other.syncBackgroundImages == syncBackgroundImages &&
+      other.apiServer == apiServer;
 
   @override
   int get hashCode => Object.hashAll(<Object?>[
@@ -692,6 +714,7 @@ class AppSettings {
     appBackground,
     readerBackground,
     syncBackgroundImages,
+    apiServer,
   ]);
 }
 
