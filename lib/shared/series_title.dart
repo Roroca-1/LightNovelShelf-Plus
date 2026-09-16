@@ -6,7 +6,7 @@ String seriesTitleFromBookTitle(String title) {
   var value = title.trim();
   value = value.replaceFirst(
     RegExp(
-      r'\s*(?:[（(]\s*)?(?:第\s*)?(?:\d+|[０-９]+|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+|[IVXivx]+)\s*(?:卷|冊|册|集|話|话|巻)?\s*[）)]?\s*$',
+      r'\s*(?:[（(]\s*)?(?:第\s*)?(?:\d+|[０-９]+|[〇零一二三四五六七八九十百千万萬两兩壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+|[IVXivx]+)\s*(?:卷|冊|册|集|話|话|巻)?\s*[）)]?\s*$',
     ),
     '',
   );
