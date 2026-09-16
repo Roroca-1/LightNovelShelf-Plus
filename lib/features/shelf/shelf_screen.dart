@@ -438,7 +438,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       ),
       items: <PopupMenuEntry<String>>[
         const PopupMenuItem(value: 'read', child: ListTile(leading: Icon(Icons.play_arrow), title: Text('阅读'))),
-        if (book.seriesTitle?.trim().isNotEmpty == true)
+        if (book.type == BookType.novel)
           const PopupMenuItem(value: 'series', child: ListTile(leading: Icon(Icons.library_books_outlined), title: Text('搜索系列'))),
         const PopupMenuItem(enabled: false, child: ListTile(leading: Icon(Icons.bookmark_added_outlined), title: Text('已在书架'))),
         PopupMenuItem(
@@ -456,7 +456,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       case 'read':
         context.push('/reader/${book.id}/1${book.type == BookType.comic ? '?type=Comic' : ''}');
       case 'series':
-        context.push(Uri(path: '/books/series', queryParameters: <String, String>{'name': book.seriesTitle!.trim(), 'order': BookListOrder.latest.wire}).toString());
+        context.push(Uri(path: '/books/series', queryParameters: <String, String>{'name': seriesTitleFromBookTitle(book.title), 'order': BookListOrder.latest.wire}).toString());
       case 'remove':
         if (isBatch) {
           await _removeItems();

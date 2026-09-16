@@ -8,6 +8,7 @@ import '../../data/settings/app_settings.dart';
 import '../../shared/content_filter.dart';
 import '../../shared/paging/paged_list.dart';
 import '../../shared/paging/paged_list_controller.dart';
+import '../../shared/series_title.dart';
 import 'home_providers.dart';
 
 /// 目录页每页目标条数。
@@ -129,16 +130,19 @@ class SeriesBooksController
   Future<FetchedPage<BookListItem>> fetchPage(int page) async {
     final api = ref.read(apiClientProvider);
     final settings = ref.read(appSettingsProvider);
-    final response = await api.getBooksBySeries(
-      seriesName: arg.name,
+    final response = await api.searchNovelBooks(BookSearchRequest(
+      keywords: arg.name,
+      mode: BookSearchMode.title,
       page: page,
       size: discoverPageSize,
-      order: arg.order,
       ignoreJapanese: settings.ignoreJapanese,
       ignoreAI: settings.ignoreAI,
-    );
+    ));
+    final items = response.items
+        .where((book) => seriesTitleFromBookTitle(book.title) == arg.name)
+        .toList(growable: false);
     return FetchedPage<BookListItem>(
-      items: applyContentFilter(response.items, settings),
+      items: applyContentFilter(items, settings),
       page: page,
       totalPages: response.totalPages,
     );
