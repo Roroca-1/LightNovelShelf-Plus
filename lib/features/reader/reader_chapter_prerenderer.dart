@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../../core/network/request_scheduler.dart';
+import '../../core/network/api_error.dart';
 import '../../data/api/api_client.dart';
 import '../../data/api/models.dart';
 import '../../data/repositories/reader_font_repository.dart';

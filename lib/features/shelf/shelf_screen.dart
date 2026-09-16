@@ -16,6 +16,7 @@ import '../../data/repositories/local_comic_shelf_repository.dart';
 import '../../data/settings/app_settings.dart';
 import '../../data/session/auth_controller.dart';
 import '../../shared/layout/book_grid_layout.dart';
+import '../../shared/series_title.dart';
 import '../../shared/paging/identity_child_delegate.dart';
 import '../../shared/widgets/app_dialogs.dart';
 import '../../shared/widgets/book_grid_slivers.dart';
@@ -995,7 +996,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     for (final item in siblings) {
       final book = item.isBook ? level.bookById[item.bookId] : null;
       final name = book?.type == BookType.novel
-          ? book?.seriesTitle?.trim()
+          ? shelfSeriesKey(book!.title, book.seriesTitle)
           : null;
       if (book == null || name == null || name.isEmpty) {
         entries.add(item);
@@ -1087,7 +1088,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       }
       final book = level.bookById[item.bookId];
       final name = book?.type == BookType.novel
-          ? book?.seriesTitle?.trim()
+          ? shelfSeriesKey(book!.title, book.seriesTitle)
           : null;
       if (book == null || name == null || name.isEmpty) {
         entries.add(item);

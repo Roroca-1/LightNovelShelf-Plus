@@ -6,6 +6,7 @@ import '../../core/network/api_error.dart';
 import '../../core/network/request_scheduler.dart';
 import '../../core/network/signalr_connection.dart';
 import 'decode.dart';
+import 'endpoints.dart';
 import 'envelope.dart';
 
 // 端点按领域拆成 extension，在此统一导出。
@@ -43,7 +44,7 @@ class SessionTokens {
 
 class ApiClient {
   ApiClient({
-    required this.apiOrigin,
+    this.apiOrigin = ServiceEndpoints.apiOrigin,
     required SignalRConnection signalR,
     required RateLimitRequestScheduler scheduler,
     required Future<Map<String, String>> Function() headers,
