@@ -60,7 +60,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.system_update_outlined),
         title: Text('发现新版本 ${found.tag}'),
-        content: const Text('可以下载适合当前平台的安装包。安装前会由系统再次确认。'),
+        content: const Text(
+          '可以下载适合当前平台的安装包。安装前会由系统再次确认。\n'
+          '下载前请先阅读更新日志，确认更新内容。',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

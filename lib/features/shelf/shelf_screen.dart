@@ -72,8 +72,9 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   void _updateMarquee(PointerMoveEvent event) {
     final start = _marqueeStart;
     if (start == null || event.kind != PointerDeviceKind.mouse) return;
-    if ((event.position - start).distance < 6 && _marqueeCurrent == null)
+    if ((event.position - start).distance < 6 && _marqueeCurrent == null) {
       return;
+    }
     final area = Rect.fromPoints(start, event.position);
     final selected = <ShelfItem>[];
     for (final item in _visibleSiblings) {
@@ -401,9 +402,10 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       editor.setMode(ShelfMode.browse);
       if (mounted) ScaffoldMessenger.of(context).showText('已从书架移出 $removed 本书');
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showText(describeShelfError(error, fallback: '无法移出所选书籍。'));
+      }
     }
   }
 
