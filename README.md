@@ -114,7 +114,7 @@ flutter run -d <ios-simulator-id>
 flutter build ios --release --no-codesign
 ```
 
-产物位于 `build/ios/iphoneos/Runner.app`。Release workflow 会将它打包为未签名的 `.ipa`；用户须在自己的 macOS 环境中用自己的证书完成签名后才能安装。本项目不收集或分发任何签名材料。
+产物位于 `build/ios/iphoneos/Runner.app`。Release workflow 会将它打包为未签名的 `.ipa`；用户须在自己的 macOS 环境中用自己的证书完成签名后才能安装。本项目不收集或分发任何签名材料。无签名 IPA 在 TrollStore 等环境没有 Keychain entitlement 时，会把登录凭据降级保存在应用私有偏好设置中；这比 Keychain 的保护弱，仅应在自主管理的设备上使用。
 
 如需注入刷新令牌：
 

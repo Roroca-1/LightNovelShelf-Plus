@@ -48,7 +48,7 @@ class AppRuntime {
   }
 
   static Future<AppRuntime> bootstrap() async {
-    final credentials = SecureCredentialStore();
+    CredentialStore credentials = SecureCredentialStore();
     final keyValueStore = await _startupStep(
       '本地偏好设置初始化',
       PreferencesKeyValueStore.open,
@@ -57,6 +57,22 @@ class AppRuntime {
       '应用设置读取',
       () => SettingsController.load(keyValueStore),
     );
+    try {
+      await credentials
+          .read(AuthCredentialKeys.refreshToken)
+          .timeout(const Duration(seconds: 6));
+    } catch (error) {
+      // -34018 是未签名 / TrollStore 安装包缺少 Keychain entitlement 的系统错误。
+      // 仅 iOS 在这个明确场景降级，其他平台或其他错误不能静默丢弃。
+      if (defaultTargetPlatform != TargetPlatform.iOS ||
+          !error.toString().contains('-34018')) {
+        rethrow;
+      }
+      debugPrint(
+        'iOS Keychain entitlement unavailable; using app-local credentials.',
+      );
+      credentials = KeyValueCredentialStore(keyValueStore);
+    }
     final customFontPath = settings.settings.customReaderFontPath;
     if (enableReaderFonts && customFontPath != null) {
       try {

@@ -56,6 +56,29 @@ class PreferencesKeyValueStore implements KeyValueStore {
   }
 }
 
+/// 仅供无法访问 iOS Keychain 的无签名安装包保存凭据。
+///
+/// 值仍在应用沙盒内，但不具备 Keychain 的硬件/系统级保护；签名正常的安装
+/// 必须继续使用 [SecureCredentialStore]。
+class KeyValueCredentialStore implements CredentialStore {
+  KeyValueCredentialStore(this._store);
+
+  static const String _prefix = 'credentials.';
+  final KeyValueStore _store;
+
+  String _key(String key) => '$_prefix$key';
+
+  @override
+  Future<String?> read(String key) => _store.read(_key(key));
+
+  @override
+  Future<void> write(String key, String value) =>
+      _store.write(_key(key), value);
+
+  @override
+  Future<void> delete(String key) => _store.delete(_key(key));
+}
+
 /// 服务端要求密码用 SHA-256 十六进制提交。
 class PasswordHasher {
   const PasswordHasher();
