@@ -17,7 +17,7 @@ import 'package:lightnovel_shelf_plus/features/book/book_detail_screen.dart';
 import 'package:lightnovel_shelf_plus/features/book/book_providers.dart';
 import 'package:lightnovel_shelf_plus/features/discover/novel_series_books_screen.dart';
 
-/// 详情页系列切换使用书名去卷号后的标题检索。
+/// 详情页系列切换优先使用服务端系列条目。
 const int _bookId = 42;
 const String _bookTitle = '某本小说 第一卷';
 
@@ -35,6 +35,7 @@ Map<String, dynamic> _detailResponse(String bookType) => <String, dynamic>{
     <String, Object?>{
       'Id': 43,
       'Title': '某本小说 第二卷',
+      'SeriesTitle': '中文系列',
       'Cover': 'https://img.test/43.jpg',
     },
   ],
@@ -113,7 +114,8 @@ class _FakeApi extends ApiClient {
             <String, dynamic>{
               'Id': 7,
               'Type': 'Novel',
-          'Title': '某本小说 第二卷',
+              'Title': '某本小说 第二卷',
+              'SeriesTitle': '中文系列',
               'Cover': 'https://img.test/7.jpg',
               'UserName': '上传者',
               'LastUpdatedAt': '2026-01-01T00:00:00Z',
@@ -206,7 +208,7 @@ void main() {
     final request = opened.api.calls
         .firstWhere((call) => call.$1 == 'GetBookListByTitle')
         .$2;
-    expect(request['KeyWords'], '某本小说');
+    expect(request['KeyWords'], '中文系列');
   });
 
   testWidgets('小说详情从菜单打开系列切换', (tester) async {
@@ -243,7 +245,7 @@ void main() {
   testWidgets('无权访问的书籍在错误页上留返回入口，桌面端能退回上一页', (tester) async {
     await _open(
       tester,
-      initialLocation: '/books/series?name=%E6%9F%90%E6%9C%AC%E5%B0%8F%E8%AF%B4&order=latest',
+      initialLocation: '/books/series?name=%E4%B8%AD%E6%96%87%E7%B3%BB%E5%88%97&order=latest',
       forbidBookInfo: true,
     );
 
@@ -266,7 +268,7 @@ void main() {
   testWidgets('无权访问不重试，详情页直接给出服务端文案', (tester) async {
     final opened = await _open(
       tester,
-      initialLocation: '/books/series?name=%E6%9F%90%E6%9C%AC%E5%B0%8F%E8%AF%B4&order=latest',
+      initialLocation: '/books/series?name=%E4%B8%AD%E6%96%87%E7%B3%BB%E5%88%97&order=latest',
       forbidBookInfo: true,
     );
 

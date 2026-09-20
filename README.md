@@ -7,8 +7,9 @@
 - Android ARM64（`arm64-v8a`）
 - Linux x86_64（AppImage）
 - Windows x86_64
+- iOS（无签名构建产物；需由使用者自行签名后安装）
 
-项目包名为 `lightnovel_shelf_plus`，Android 应用标识为 `app.lightnovel.shelf.plus`，因此可以与官方版轻书架同时安装。因没设备测试所以项目不构建或发布 iOS、macOS 软件包。
+项目包名为 `lightnovel_shelf_plus`，Android / iOS 应用标识为 `app.lightnovel.shelf.plus`，因此可以与官方版轻书架同时安装。iOS 项目不包含开发团队、证书或配置文件；CI 和发布仅生成未签名产物。未签名的 iOS 应用不能直接装到真机，使用者须使用自己的 Apple 开发者证书或其他合法签名方式安装。
 
 ## 相较官方版新增的功能
 
@@ -96,6 +97,24 @@ flutter analyze
 flutter test
 flutter run -d <device>
 ```
+
+## 编译 iOS（无签名）
+
+需要 macOS、Xcode 和 Flutter。项目不会写入签名信息；可先在模拟器测试：
+
+```bash
+flutter pub get
+flutter test
+flutter run -d <ios-simulator-id>
+```
+
+生成可自行签名的真机 Release 应用：
+
+```bash
+flutter build ios --release --no-codesign
+```
+
+产物位于 `build/ios/iphoneos/Runner.app`。如需导出 IPA，请在自己的 macOS 环境中用自己的证书完成签名和导出；本项目不收集或分发任何签名材料。
 
 如需注入刷新令牌：
 

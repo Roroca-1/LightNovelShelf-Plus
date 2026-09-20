@@ -130,16 +130,20 @@ class SeriesBooksController
   Future<FetchedPage<BookListItem>> fetchPage(int page) async {
     final api = ref.read(apiClientProvider);
     final settings = ref.read(appSettingsProvider);
-    final response = await api.searchNovelBooks(BookSearchRequest(
-      keywords: arg.name,
-      mode: BookSearchMode.title,
-      page: page,
-      size: discoverPageSize,
-      ignoreJapanese: settings.ignoreJapanese,
-      ignoreAI: settings.ignoreAI,
-    ));
+    final response = await api.searchNovelBooks(
+      BookSearchRequest(
+        keywords: arg.name,
+        mode: BookSearchMode.title,
+        page: page,
+        size: discoverPageSize,
+        ignoreJapanese: settings.ignoreJapanese,
+        ignoreAI: settings.ignoreAI,
+      ),
+    );
     final items = response.items
-        .where((book) => seriesTitleFromBookTitle(book.title) == arg.name)
+        .where(
+          (book) => seriesKeyForBook(book.title, book.seriesTitle) == arg.name,
+        )
         .toList(growable: false);
     return FetchedPage<BookListItem>(
       items: applyContentFilter(items, settings),

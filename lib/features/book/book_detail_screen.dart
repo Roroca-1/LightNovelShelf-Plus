@@ -39,7 +39,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   int get _request => widget.id;
 
   String _seriesTitleOf(BookDetailBundle bundle) {
-    return seriesTitleFromBookTitle(bundle.detail.title);
+    return seriesKeyForBook(bundle.detail.title, bundle.detail.seriesTitle);
   }
 
   void _openSeries(BookDetailBundle bundle) {

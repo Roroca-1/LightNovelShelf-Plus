@@ -64,15 +64,16 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     _marqueeCurrent = null;
     _marqueeBaseSelection =
         (HardwareKeyboard.instance.isControlPressed ||
-                HardwareKeyboard.instance.isMetaPressed)
-            ? Set<String>.of(_state.selected)
-            : const <String>{};
+            HardwareKeyboard.instance.isMetaPressed)
+        ? Set<String>.of(_state.selected)
+        : const <String>{};
   }
 
   void _updateMarquee(PointerMoveEvent event) {
     final start = _marqueeStart;
     if (start == null || event.kind != PointerDeviceKind.mouse) return;
-    if ((event.position - start).distance < 6 && _marqueeCurrent == null) return;
+    if ((event.position - start).distance < 6 && _marqueeCurrent == null)
+      return;
     final area = Rect.fromPoints(start, event.position);
     final selected = <ShelfItem>[];
     for (final item in _visibleSiblings) {
@@ -137,7 +138,9 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
 
   void _modifiedSelect(ShelfItem item, List<ShelfItem> siblings, bool shift) {
     if (shift && _selectionAnchor != null) {
-      final start = siblings.indexWhere((entry) => entry.key == _selectionAnchor);
+      final start = siblings.indexWhere(
+        (entry) => entry.key == _selectionAnchor,
+      );
       final end = siblings.indexWhere((entry) => entry.key == item.key);
       if (start >= 0 && end >= 0) {
         final low = start < end ? start : end;
@@ -156,8 +159,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
 
   ShelfSortSetting get _sort => ref.read(appSettingsProvider).shelfSort;
 
-  bool get _seriesView =>
-      ref.read(appSettingsProvider).shelfSeriesView;
+  bool get _seriesView => ref.read(appSettingsProvider).shelfSeriesView;
 
   BookDisplayMode get _displayMode =>
       ref.read(appSettingsProvider).shelfDisplayMode;
@@ -399,7 +401,9 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       editor.setMode(ShelfMode.browse);
       if (mounted) ScaffoldMessenger.of(context).showText('已从书架移出 $removed 本书');
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showText(describeShelfError(error, fallback: '无法移出所选书籍。'));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showText(describeShelfError(error, fallback: '无法移出所选书籍。'));
     }
   }
 
@@ -425,10 +429,10 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         .where((entry) => entry.bookId == book.id)
         .firstOrNull;
     final selectedCount = _state.selected.length;
-    final isBatch = item != null &&
-        selectedCount > 1 &&
-        _state.selected.contains(item.key);
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final isBatch =
+        item != null && selectedCount > 1 && _state.selected.contains(item.key);
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
     final local = overlay.globalToLocal(position);
     final action = await showMenu<String>(
       context: context,
@@ -437,10 +441,25 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         Offset.zero & overlay.size,
       ),
       items: <PopupMenuEntry<String>>[
-        const PopupMenuItem(value: 'read', child: ListTile(leading: Icon(Icons.play_arrow), title: Text('阅读'))),
+        const PopupMenuItem(
+          value: 'read',
+          child: ListTile(leading: Icon(Icons.play_arrow), title: Text('阅读')),
+        ),
         if (book.type == BookType.novel)
-          const PopupMenuItem(value: 'series', child: ListTile(leading: Icon(Icons.library_books_outlined), title: Text('搜索系列'))),
-        const PopupMenuItem(enabled: false, child: ListTile(leading: Icon(Icons.bookmark_added_outlined), title: Text('已在书架'))),
+          const PopupMenuItem(
+            value: 'series',
+            child: ListTile(
+              leading: Icon(Icons.library_books_outlined),
+              title: Text('搜索系列'),
+            ),
+          ),
+        const PopupMenuItem(
+          enabled: false,
+          child: ListTile(
+            leading: Icon(Icons.bookmark_added_outlined),
+            title: Text('已在书架'),
+          ),
+        ),
         PopupMenuItem(
           value: 'remove',
           child: ListTile(
@@ -448,15 +467,31 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
             title: Text(isBatch ? '移出所选 $selectedCount 项' : '移出书架'),
           ),
         ),
-        const PopupMenuItem(value: 'select', child: ListTile(leading: Icon(Icons.checklist_outlined), title: Text('多选'))),
+        const PopupMenuItem(
+          value: 'select',
+          child: ListTile(
+            leading: Icon(Icons.checklist_outlined),
+            title: Text('多选'),
+          ),
+        ),
       ],
     );
     if (!mounted || action == null) return;
     switch (action) {
       case 'read':
-        context.push('/reader/${book.id}/1${book.type == BookType.comic ? '?type=Comic' : ''}');
+        context.push(
+          '/reader/${book.id}/1${book.type == BookType.comic ? '?type=Comic' : ''}',
+        );
       case 'series':
-        context.push(Uri(path: '/books/series', queryParameters: <String, String>{'name': seriesTitleFromBookTitle(book.title), 'order': BookListOrder.latest.wire}).toString());
+        context.push(
+          Uri(
+            path: '/books/series',
+            queryParameters: <String, String>{
+              'name': seriesKeyForBook(book.title, book.seriesTitle),
+              'order': BookListOrder.latest.wire,
+            },
+          ).toString(),
+        );
       case 'remove':
         if (isBatch) {
           await _removeItems();
@@ -577,15 +612,16 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       ),
     );
     final auth = ref.watch(authSnapshotProvider);
-    final authenticated = auth.isAuthenticated ||
+    final authenticated =
+        auth.isAuthenticated ||
         (ref.read(appRuntimeProvider).hasStoredSession &&
             (auth.status == AuthenticationStatus.unknown ||
                 auth.status == AuthenticationStatus.refreshing));
     final async = ref.watch(shelfProvider);
     final editor = ref.watch(shelfEditorProvider(_editorKey));
     final snapshot = async.value;
-    final localComics = ref.watch(localComicShelfProvider).value ??
-        const <LocalShelfComic>[];
+    final localComics =
+        ref.watch(localComicShelfProvider).value ?? const <LocalShelfComic>[];
     final controller = _editor;
     final dirty = snapshot != null && controller.isDirty(snapshot);
     final draft = snapshot == null ? null : controller.effectiveDraft(snapshot);
@@ -636,84 +672,87 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           return KeyEventResult.ignored;
         },
         child: Scaffold(
-        appBar: AppBar(
-          title: Text(title),
-          actions: <Widget>[
-            if (snapshot != null && editor.mode == ShelfMode.browse)
-              _ShelfSortMenu(value: _sort, onChanged: _setSort),
-            if (snapshot != null && editor.mode == ShelfMode.browse)
-              IconButton(
-                tooltip: _seriesView ? '按单本显示' : '按系列显示',
-                onPressed: () => ref
-                    .read(settingsControllerProvider)
-                    .update(
-                      (settings) => settings.copyWith(
-                        shelfSeriesView: !settings.shelfSeriesView,
-                      ),
-                    ),
-                icon: Icon(
-                  _seriesView
-                      ? Icons.folder_outlined
-                      : Icons.description_outlined,
-                ),
-              ),
-            if (snapshot != null && editor.mode == ShelfMode.browse)
-              IconButton(
-                tooltip: _displayMode == BookDisplayMode.grid
-                    ? '切换到列表视图'
-                    : '切换到网格视图',
-                onPressed: () => ref
-                    .read(settingsControllerProvider)
-                    .update(
-                      (settings) => settings.copyWith(
-                        shelfDisplayMode:
-                            settings.shelfDisplayMode == BookDisplayMode.grid
-                            ? BookDisplayMode.list
-                            : BookDisplayMode.grid,
-                      ),
-                    ),
-                icon: Icon(
-                  _displayMode == BookDisplayMode.grid
-                      ? Icons.view_list_outlined
-                      : Icons.grid_view_outlined,
-                ),
-              ),
-            if (dirty && !editor.saving)
-              TextButton(onPressed: () => _discard(), child: const Text('取消')),
-            if (dirty)
-              editor.saving
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Center(
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.2),
+          appBar: AppBar(
+            title: Text(title),
+            actions: <Widget>[
+              if (snapshot != null && editor.mode == ShelfMode.browse)
+                _ShelfSortMenu(value: _sort, onChanged: _setSort),
+              if (snapshot != null && editor.mode == ShelfMode.browse)
+                IconButton(
+                  tooltip: _seriesView ? '按单本显示' : '按系列显示',
+                  onPressed: () => ref
+                      .read(settingsControllerProvider)
+                      .update(
+                        (settings) => settings.copyWith(
+                          shelfSeriesView: !settings.shelfSeriesView,
                         ),
                       ),
-                    )
-                  : TextButton(onPressed: _save, child: const Text('保存')),
-            IconButton(
-              tooltip: '管理书架',
-              onPressed: snapshot == null ? null : _openManageSheet,
-              icon: const Icon(Icons.more_vert),
-            ),
-          ],
-        ),
-        body: !authenticated
-            ? EmptyStateView(
-                icon: Icons.lock_outline,
-                title: '登录后查看书架',
-                description: '登录轻书架账号即可同步书架与阅读进度。',
-                actionLabel: '去登录',
-                onAction: () => context.go('/sign-in'),
-              )
-            : _selectionSurface(
-                RefreshIndicator(
-                  onRefresh: () => ref.read(shelfProvider.notifier).reload(),
-                  child: _body(async, editor, snapshot, draft, localComics),
+                  icon: Icon(
+                    _seriesView
+                        ? Icons.folder_outlined
+                        : Icons.description_outlined,
+                  ),
                 ),
+              if (snapshot != null && editor.mode == ShelfMode.browse)
+                IconButton(
+                  tooltip: _displayMode == BookDisplayMode.grid
+                      ? '切换到列表视图'
+                      : '切换到网格视图',
+                  onPressed: () => ref
+                      .read(settingsControllerProvider)
+                      .update(
+                        (settings) => settings.copyWith(
+                          shelfDisplayMode:
+                              settings.shelfDisplayMode == BookDisplayMode.grid
+                              ? BookDisplayMode.list
+                              : BookDisplayMode.grid,
+                        ),
+                      ),
+                  icon: Icon(
+                    _displayMode == BookDisplayMode.grid
+                        ? Icons.view_list_outlined
+                        : Icons.grid_view_outlined,
+                  ),
+                ),
+              if (dirty && !editor.saving)
+                TextButton(
+                  onPressed: () => _discard(),
+                  child: const Text('取消'),
+                ),
+              if (dirty)
+                editor.saving
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                          ),
+                        ),
+                      )
+                    : TextButton(onPressed: _save, child: const Text('保存')),
+              IconButton(
+                tooltip: '管理书架',
+                onPressed: snapshot == null ? null : _openManageSheet,
+                icon: const Icon(Icons.more_vert),
               ),
+            ],
+          ),
+          body: !authenticated
+              ? EmptyStateView(
+                  icon: Icons.lock_outline,
+                  title: '登录后查看书架',
+                  description: '登录轻书架账号即可同步书架与阅读进度。',
+                  actionLabel: '去登录',
+                  onAction: () => context.go('/sign-in'),
+                )
+              : _selectionSurface(
+                  RefreshIndicator(
+                    onRefresh: () => ref.read(shelfProvider.notifier).reload(),
+                    child: _body(async, editor, snapshot, draft, localComics),
+                  ),
+                ),
         ),
       ),
     );
@@ -864,7 +903,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           _displayMode == BookDisplayMode.list
               ? _seriesList(displayLevel, siblings)
               : _seriesGrid(displayLevel, layout, siblings)
-        else if (_displayMode == BookDisplayMode.list && editor.mode != ShelfMode.drag)
+        else if (_displayMode == BookDisplayMode.list &&
+            editor.mode != ShelfMode.drag)
           _bookList(displayLevel, siblings)
         else
           SliverPadding(
@@ -913,82 +953,81 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     );
   }
 
-  Widget _bookList(ShelfLevel level, List<ShelfItem> siblings) =>
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(
-          BookGridLayout.horizontalPadding,
-          0,
-          BookGridLayout.horizontalPadding,
-          32,
-        ),
-        sliver: SliverList.separated(
-          itemCount: siblings.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
-          itemBuilder: (context, index) {
-            final item = siblings[index];
-            if (item.isBook) {
-              final book = level.bookById[item.bookId];
-              if (book == null) {
-                return const Card(
-                  margin: EdgeInsets.zero,
-                  child: ListTile(
-                    leading: Icon(Icons.book_outlined),
-                    title: Text('书籍已下架'),
-                  ),
-                );
-              }
-              final selected = _state.selected.contains(item.key);
-              return KeyedSubtree(
-                key: _itemKey(item),
-                child: CallbackShortcuts(
-                  bindings: <ShortcutActivator, VoidCallback>{
-                    const SingleActivator(LogicalKeyboardKey.space): () {
-                      if (_state.mode == ShelfMode.select) {
-                        _editor.toggleSelection(item);
-                      } else {
-                        _editor.beginSelection(item);
-                      }
-                    },
-                  },
-                  child: BookListRow(
-                    book: book,
-                    onSecondaryTap: (position) => _showBookMenu(book, position),
-                    selected: selected,
-                    onLongPress: () => _editor.beginSelection(item),
-                    onFocusChange: (focused) {
-                      if (focused) _focusedItem = item;
-                    },
-                    onTap: () => _state.mode == ShelfMode.select
-                        ? _editor.toggleSelection(item)
-                        : (HardwareKeyboard.instance.isControlPressed ||
-                                  HardwareKeyboard.instance.isMetaPressed ||
-                                  HardwareKeyboard.instance.isShiftPressed)
-                            ? _modifiedSelect(
-                                item,
-                                siblings,
-                                HardwareKeyboard.instance.isShiftPressed,
-                              )
-                            : _openBook(book),
-                  ),
-                ),
-              );
-            }
-            final title = item.title.trim();
-            return Card(
+  Widget _bookList(ShelfLevel level, List<ShelfItem> siblings) => SliverPadding(
+    padding: const EdgeInsets.fromLTRB(
+      BookGridLayout.horizontalPadding,
+      0,
+      BookGridLayout.horizontalPadding,
+      32,
+    ),
+    sliver: SliverList.separated(
+      itemCount: siblings.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final item = siblings[index];
+        if (item.isBook) {
+          final book = level.bookById[item.bookId];
+          if (book == null) {
+            return const Card(
               margin: EdgeInsets.zero,
               child: ListTile(
-                onTap: () => _openFolder(item.folderId!),
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(title.isEmpty ? '未命名文件夹' : title),
-                subtitle: Text(
-                  '${level.folderPreviews[item.folderId]?.count ?? 0} 本书',
-                ),
-                trailing: const Icon(Icons.chevron_right),
+                leading: Icon(Icons.book_outlined),
+                title: Text('书籍已下架'),
               ),
             );
-          },
-        ),
-      );
+          }
+          final selected = _state.selected.contains(item.key);
+          return KeyedSubtree(
+            key: _itemKey(item),
+            child: CallbackShortcuts(
+              bindings: <ShortcutActivator, VoidCallback>{
+                const SingleActivator(LogicalKeyboardKey.space): () {
+                  if (_state.mode == ShelfMode.select) {
+                    _editor.toggleSelection(item);
+                  } else {
+                    _editor.beginSelection(item);
+                  }
+                },
+              },
+              child: BookListRow(
+                book: book,
+                onSecondaryTap: (position) => _showBookMenu(book, position),
+                selected: selected,
+                onLongPress: () => _editor.beginSelection(item),
+                onFocusChange: (focused) {
+                  if (focused) _focusedItem = item;
+                },
+                onTap: () => _state.mode == ShelfMode.select
+                    ? _editor.toggleSelection(item)
+                    : (HardwareKeyboard.instance.isControlPressed ||
+                          HardwareKeyboard.instance.isMetaPressed ||
+                          HardwareKeyboard.instance.isShiftPressed)
+                    ? _modifiedSelect(
+                        item,
+                        siblings,
+                        HardwareKeyboard.instance.isShiftPressed,
+                      )
+                    : _openBook(book),
+              ),
+            ),
+          );
+        }
+        final title = item.title.trim();
+        return Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            onTap: () => _openFolder(item.folderId!),
+            leading: const Icon(Icons.folder_outlined),
+            title: Text(title.isEmpty ? '未命名文件夹' : title),
+            subtitle: Text(
+              '${level.folderPreviews[item.folderId]?.count ?? 0} 本书',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+        );
+      },
+    ),
+  );
 
   Widget _seriesList(ShelfLevel level, List<ShelfItem> siblings) {
     final grouped = <String, List<BookListItem>>{};
@@ -1002,10 +1041,12 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         entries.add(item);
         continue;
       }
-      grouped.putIfAbsent(name, () {
-        entries.add(name);
-        return <BookListItem>[];
-      }).add(book);
+      grouped
+          .putIfAbsent(name, () {
+            entries.add(name);
+            return <BookListItem>[];
+          })
+          .add(book);
     }
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(
@@ -1043,9 +1084,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           }
           final books = grouped[entry]!;
           final latest = books.reduce(
-            (left, right) => left.lastUpdatedAt.isAfter(right.lastUpdatedAt)
-                ? left
-                : right,
+            (left, right) =>
+                left.lastUpdatedAt.isAfter(right.lastUpdatedAt) ? left : right,
           );
           final series = BookListItem(
             id: latest.id,
@@ -1063,7 +1103,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           return BookListRow(
             book: series,
             subtitle: [
-              if (latest.authorName?.trim().isNotEmpty == true) latest.authorName!.trim(),
+              if (latest.authorName?.trim().isNotEmpty == true)
+                latest.authorName!.trim(),
               '${books.length} 本',
               '更新于 ${latest.lastUpdatedAt.year}-${latest.lastUpdatedAt.month.toString().padLeft(2, '0')}-${latest.lastUpdatedAt.day.toString().padLeft(2, '0')}',
             ].join(' · '),
@@ -1135,7 +1176,9 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           ShelfSortSetting.updatedOldest => updatedAt(
             left,
           ).compareTo(updatedAt(right)),
-          ShelfSortSetting.addedNewest => addedAt(right).compareTo(addedAt(left)),
+          ShelfSortSetting.addedNewest => addedAt(
+            right,
+          ).compareTo(addedAt(left)),
         };
         return order != 0 ? order : titleOrder;
       });
@@ -1198,13 +1241,13 @@ class _ShelfSortMenu extends StatelessWidget {
 
   static const Map<ShelfSortSetting, String> _labels =
       <ShelfSortSetting, String>{
-    ShelfSortSetting.manual: '手动顺序',
-    ShelfSortSetting.titleAscending: '标题 A–Z（拼音/罗马字）',
-    ShelfSortSetting.titleDescending: '标题 Z–A（拼音/罗马字）',
-    ShelfSortSetting.updatedNewest: '最近更新',
-    ShelfSortSetting.updatedOldest: '最早更新',
-    ShelfSortSetting.addedNewest: '最近加入',
-  };
+        ShelfSortSetting.manual: '手动顺序',
+        ShelfSortSetting.titleAscending: '标题 A–Z（拼音/罗马字）',
+        ShelfSortSetting.titleDescending: '标题 Z–A（拼音/罗马字）',
+        ShelfSortSetting.updatedNewest: '最近更新',
+        ShelfSortSetting.updatedOldest: '最早更新',
+        ShelfSortSetting.addedNewest: '最近加入',
+      };
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<ShelfSortSetting>(
