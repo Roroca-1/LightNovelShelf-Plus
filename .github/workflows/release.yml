@@ -242,9 +242,46 @@ jobs:
           path: dist/*
           retention-days: 30
 
+  ios:
+    # iOS 真机应用必须在 macOS 上构建；此作业刻意不注入团队、证书或描述文件。
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare artifact metadata
+        run: |
+          safe_tag="$(printf '%s' "$RELEASE_TAG" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+          test -n "$safe_tag" || safe_tag=test
+          echo "ARTIFACT_TAG=$safe_tag" >> "$GITHUB_ENV"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build unsigned iOS release app
+        run: flutter build ios --release --no-codesign --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
+      - name: Verify Plus application ID
+        run: |
+          app="build/ios/iphoneos/Runner.app"
+          test -d "$app"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          echo "iOS bundle ID: $bundle_id"
+          test "$bundle_id" = "app.lightnovel.shelf.plus"
+      - name: Package unsigned iOS app
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app \
+            "dist/LightNovelShelfPlus-${ARTIFACT_TAG}-ios-unsigned.app.zip"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-${{ env.RELEASE_TAG }}-ios
+          path: dist/*
+          retention-days: 30
+
   publish:
     if: github.event_name != 'workflow_dispatch' || inputs.publish
-    needs: [android, linux, windows]
+    needs: [android, linux, windows, ios]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
