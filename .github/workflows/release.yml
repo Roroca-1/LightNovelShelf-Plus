@@ -268,11 +268,12 @@ jobs:
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
           echo "iOS bundle ID: $bundle_id"
           test "$bundle_id" = "app.lightnovel.shelf.plus"
-      - name: Package unsigned iOS app
+      - name: Package unsigned iOS IPA
         run: |
-          mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app \
-            "dist/LightNovelShelfPlus-${ARTIFACT_TAG}-ios-unsigned.app.zip"
+          mkdir -p dist Payload
+          ditto build/ios/iphoneos/Runner.app Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent Payload \
+            "dist/LightNovelShelfPlus-${ARTIFACT_TAG}-ios-unsigned.ipa"
       - uses: actions/upload-artifact@v5
         with:
           name: release-${{ env.RELEASE_TAG }}-ios

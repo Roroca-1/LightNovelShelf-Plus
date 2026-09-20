@@ -114,7 +114,7 @@ flutter run -d <ios-simulator-id>
 flutter build ios --release --no-codesign
 ```
 
-产物位于 `build/ios/iphoneos/Runner.app`。如需导出 IPA，请在自己的 macOS 环境中用自己的证书完成签名和导出；本项目不收集或分发任何签名材料。
+产物位于 `build/ios/iphoneos/Runner.app`。Release workflow 会将它打包为未签名的 `.ipa`；用户须在自己的 macOS 环境中用自己的证书完成签名后才能安装。本项目不收集或分发任何签名材料。
 
 如需注入刷新令牌：
 
