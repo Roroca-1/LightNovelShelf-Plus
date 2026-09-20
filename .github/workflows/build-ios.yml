@@ -1,0 +1,34 @@
+name: Build unsigned iOS test IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - name: Build unsigned IPA
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=APP_RELEASE_TAG=ios-test-${{ github.run_number }}
+          mkdir -p Payload dist
+          ditto build/ios/iphoneos/Runner.app Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent Payload \
+            dist/lightnovelshelf-plus-ios-unsigned-test.ipa
+      - uses: actions/upload-artifact@v5
+        with:
+          name: lightnovelshelf-plus-ios-unsigned-test
+          path: dist/lightnovelshelf-plus-ios-unsigned-test.ipa
+          retention-days: 7

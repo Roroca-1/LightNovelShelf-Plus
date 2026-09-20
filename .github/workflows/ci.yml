@@ -107,3 +107,29 @@ jobs:
           name: lightnovelshelf-plus-windows-x64-debug
           path: lightnovelshelf-plus-windows-x64-debug.zip
           retention-days: 7
+
+  ios:
+    # 真机测试包保持未签名，供 TrollStore / 自行重签名环境排障。
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build unsigned iOS test IPA
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=APP_RELEASE_TAG=ci-${{ github.run_number }}
+          mkdir -p Payload dist
+          ditto build/ios/iphoneos/Runner.app Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent Payload \
+            dist/lightnovelshelf-plus-ios-unsigned-test.ipa
+      - uses: actions/upload-artifact@v5
+        with:
+          name: lightnovelshelf-plus-ios-unsigned-test
+          path: dist/lightnovelshelf-plus-ios-unsigned-test.ipa
+          retention-days: 7
