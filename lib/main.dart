@@ -51,7 +51,7 @@ class _AppBootstrapState extends State<_AppBootstrap> {
     );
     await initializeDateFormatting('zh_CN');
     final runtime = await AppRuntime.bootstrap().timeout(
-      const Duration(seconds: 12),
+      const Duration(seconds: 20),
       onTimeout: () => throw TimeoutException('本地存储初始化超时。'),
     );
     if (_injectedRefreshToken.isNotEmpty) {
@@ -78,15 +78,24 @@ class _AppBootstrapState extends State<_AppBootstrap> {
           child: const LightNovelShelfApp(),
         );
       }
-      return _StartupScreen(failure: snapshot.hasError, onRetry: _retry);
+      return _StartupScreen(
+        failure: snapshot.hasError,
+        message: snapshot.error?.toString(),
+        onRetry: _retry,
+      );
     },
   );
 }
 
 class _StartupScreen extends StatelessWidget {
-  const _StartupScreen({required this.failure, required this.onRetry});
+  const _StartupScreen({
+    required this.failure,
+    required this.message,
+    required this.onRetry,
+  });
 
   final bool failure;
+  final String? message;
   final VoidCallback onRetry;
 
   @override
@@ -108,7 +117,12 @@ class _StartupScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     const Text('应用启动失败'),
                     const SizedBox(height: 8),
-                    const Text('本地存储初始化没有完成，请重试。', textAlign: TextAlign.center),
+                    Text(
+                      message?.trim().isNotEmpty == true
+                          ? message!
+                          : '本地存储初始化没有完成，请重试。',
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 16),
                     FilledButton(onPressed: onRetry, child: const Text('重试')),
                   ],

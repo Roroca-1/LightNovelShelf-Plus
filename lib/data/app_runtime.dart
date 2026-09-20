@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -32,10 +34,29 @@ class AppRuntime {
   final AuthController auth;
   final bool hasStoredSession;
 
+  static Future<T> _startupStep<T>(
+    String name,
+    Future<T> Function() operation,
+  ) async {
+    try {
+      return await operation().timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      throw StateError('$name 超时。');
+    } catch (error) {
+      throw StateError('$name 失败：$error');
+    }
+  }
+
   static Future<AppRuntime> bootstrap() async {
     final credentials = SecureCredentialStore();
-    final keyValueStore = await PreferencesKeyValueStore.open();
-    final settings = await SettingsController.load(keyValueStore);
+    final keyValueStore = await _startupStep(
+      '本地偏好设置初始化',
+      PreferencesKeyValueStore.open,
+    );
+    final settings = await _startupStep(
+      '应用设置读取',
+      () => SettingsController.load(keyValueStore),
+    );
     final customFontPath = settings.settings.customReaderFontPath;
     if (enableReaderFonts && customFontPath != null) {
       try {
@@ -90,7 +111,7 @@ class AppRuntime {
       signalR: signalR,
       api: api,
       auth: auth,
-      hasStoredSession: await auth.hasStoredSession(),
+      hasStoredSession: await _startupStep('安全凭据读取', auth.hasStoredSession),
     );
   }
 
