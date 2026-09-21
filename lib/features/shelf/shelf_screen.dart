@@ -1031,25 +1031,36 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     ),
   );
 
-  Widget _seriesList(ShelfLevel level, List<ShelfItem> siblings) {
-    final grouped = <String, List<BookListItem>>{};
+  List<Object> _seriesEntries(ShelfLevel level, List<ShelfItem> siblings) {
+    final groups = groupShelfSeries(
+      siblings
+          .where((item) => item.isBook)
+          .map((item) => level.bookById[item.bookId])
+          .whereType<BookListItem>()
+          .where((book) => book.type == BookType.novel),
+      titleOf: (book) => book.title,
+      serverSeriesTitleOf: (book) => book.seriesTitle,
+    );
+    final groupByBookId = <int, ShelfSeriesGroup<BookListItem>>{
+      for (final group in groups)
+        for (final book in group.items) book.id: group,
+    };
+    final emitted = <ShelfSeriesGroup<BookListItem>>{};
     final entries = <Object>[];
     for (final item in siblings) {
       final book = item.isBook ? level.bookById[item.bookId] : null;
-      final name = book?.type == BookType.novel
-          ? shelfSeriesKey(book!.title, book.seriesTitle)
-          : null;
-      if (book == null || name == null || name.isEmpty) {
+      final group = book == null ? null : groupByBookId[book.id];
+      if (group == null) {
         entries.add(item);
         continue;
       }
-      grouped
-          .putIfAbsent(name, () {
-            entries.add(name);
-            return <BookListItem>[];
-          })
-          .add(book);
+      if (emitted.add(group)) entries.add(group);
     }
+    return entries;
+  }
+
+  Widget _seriesList(ShelfLevel level, List<ShelfItem> siblings) {
+    final entries = _seriesEntries(level, siblings);
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(
         BookGridLayout.horizontalPadding,
@@ -1062,7 +1073,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final entry = entries[index];
-          if (entry is! String) {
+          if (entry is! ShelfSeriesGroup<BookListItem>) {
             final item = entry as ShelfItem;
             if (!item.isBook) {
               final title = item.title.trim();
@@ -1084,7 +1095,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
                 ? const SizedBox.shrink()
                 : BookListRow(book: book, onTap: () => _openBook(book));
           }
-          final books = grouped[entry]!;
+          final books = entry.items;
           final latest = books.reduce(
             (left, right) =>
                 left.lastUpdatedAt.isAfter(right.lastUpdatedAt) ? left : right,
@@ -1092,8 +1103,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           final series = BookListItem(
             id: latest.id,
             type: BookType.novel,
-            title: entry,
-            seriesTitle: entry,
+            title: entry.name,
+            seriesTitle: entry.name,
             coverUrl: latest.coverUrl,
             coverPlaceholder: latest.coverPlaceholder,
             authorName: latest.authorName,
@@ -1110,7 +1121,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
               '${books.length} 本',
               '更新于 ${latest.lastUpdatedAt.year}-${latest.lastUpdatedAt.month.toString().padLeft(2, '0')}-${latest.lastUpdatedAt.day.toString().padLeft(2, '0')}',
             ].join(' · '),
-            onTap: () => _openShelfSeries(entry, books),
+            onTap: () => _openShelfSeries(entry.name, books),
           );
         },
       ),
@@ -1122,33 +1133,14 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     BookGridLayout layout,
     List<ShelfItem> siblings,
   ) {
-    final grouped = <String, List<BookListItem>>{};
-    final entries = <Object>[];
-    for (final item in siblings) {
-      if (!item.isBook) {
-        entries.add(item);
-        continue;
-      }
-      final book = level.bookById[item.bookId];
-      final name = book?.type == BookType.novel
-          ? shelfSeriesKey(book!.title, book.seriesTitle)
-          : null;
-      if (book == null || name == null || name.isEmpty) {
-        entries.add(item);
-        continue;
-      }
-      final books = grouped.putIfAbsent(name, () {
-        entries.add(name);
-        return <BookListItem>[];
-      });
-      books.add(book);
-    }
+    final entries = _seriesEntries(level, siblings);
 
     if (_sort != ShelfSortSetting.manual) {
-      String titleOf(Object entry) =>
-          entry is String ? entry : _itemTitle(entry as ShelfItem, level);
-      DateTime addedAt(Object entry) => entry is String
-          ? grouped[entry]!
+      String titleOf(Object entry) => entry is ShelfSeriesGroup<BookListItem>
+          ? entry.name
+          : _itemTitle(entry as ShelfItem, level);
+      DateTime addedAt(Object entry) => entry is ShelfSeriesGroup<BookListItem>
+          ? entry.items
                 .map(
                   (book) => siblings.firstWhere(
                     (item) => item.isBook && item.bookId == book.id,
@@ -1157,8 +1149,9 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
                 .map(_addedAt)
                 .reduce((left, right) => left.isAfter(right) ? left : right)
           : _addedAt(entry as ShelfItem);
-      DateTime updatedAt(Object entry) => entry is String
-          ? grouped[entry]!
+      DateTime updatedAt(Object entry) =>
+          entry is ShelfSeriesGroup<BookListItem>
+          ? entry.items
                 .map((book) => book.lastUpdatedAt)
                 .reduce((left, right) => left.isAfter(right) ? left : right)
           : _updatedAt(entry as ShelfItem, level);
@@ -1197,8 +1190,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         gridDelegate: layout.tileGridDelegate(),
         delegate: SliverChildBuilderDelegate((context, index) {
           final entry = entries[index];
-          if (entry is String) {
-            final books = grouped[entry]!;
+          if (entry is ShelfSeriesGroup<BookListItem>) {
+            final books = entry.items;
             final latest = books.reduce(
               (left, right) => left.lastUpdatedAt.isAfter(right.lastUpdatedAt)
                   ? left
@@ -1206,14 +1199,14 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
             );
             return NovelSeriesTile(
               series: NovelSeriesListItem(
-                name: entry,
+                name: entry.name,
                 coverUrl: latest.coverUrl,
                 coverPlaceholder: latest.coverPlaceholder,
                 bookCount: books.length,
                 lastUpdatedAt: latest.lastUpdatedAt,
               ),
               coverHeight: layout.coverHeight,
-              onTap: () => _openShelfSeries(entry, books),
+              onTap: () => _openShelfSeries(entry.name, books),
             );
           }
           final item = entry as ShelfItem;

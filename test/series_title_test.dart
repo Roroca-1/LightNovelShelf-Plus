@@ -28,4 +28,35 @@ void main() {
       expect(seriesKeyForBook('某本小说 第二卷', '  '), '某本小说');
     });
   });
+
+  group('groupShelfSeries', () {
+    test('用去卷号标题把缺少服务端系列的首册接入服务端系列', () {
+      final groups = groupShelfSeries(
+        <({String title, String? serverSeries})>[
+          (title: '《人生重来的恶德领主不知悔改！ 1》', serverSeries: null),
+          (title: '《人生重来的恶德领主不知悔改！ 2》', serverSeries: 'やり直し悪徳領主に…'),
+          (title: '《人生重来的恶德领主不知悔改！ 3》', serverSeries: 'やり直し悪徳領主に…'),
+        ],
+        titleOf: (book) => book.title,
+        serverSeriesTitleOf: (book) => book.serverSeries,
+      );
+
+      expect(groups, hasLength(1));
+      expect(groups.single.name, 'やり直し悪徳領主に…');
+      expect(groups.single.items.map((book) => book.title), hasLength(3));
+    });
+
+    test('未实际去除卷号的同名书不会仅凭标题被合并', () {
+      final groups = groupShelfSeries(
+        <({String title, String? serverSeries})>[
+          (title: '同名作品', serverSeries: '系列甲'),
+          (title: '同名作品', serverSeries: '系列乙'),
+        ],
+        titleOf: (book) => book.title,
+        serverSeriesTitleOf: (book) => book.serverSeries,
+      );
+
+      expect(groups, hasLength(2));
+    });
+  });
 }
