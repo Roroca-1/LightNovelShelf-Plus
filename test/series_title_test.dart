@@ -33,9 +33,9 @@ void main() {
     test('用去卷号标题把缺少服务端系列的首册接入服务端系列', () {
       final groups = groupShelfSeries(
         <({String title, String? serverSeries})>[
-          (title: '《人生重来的恶德领主不知悔改！ 1》', serverSeries: null),
-          (title: '《人生重来的恶德领主不知悔改！ 2》', serverSeries: 'やり直し悪徳領主に…'),
-          (title: '《人生重来的恶德领主不知悔改！ 3》', serverSeries: 'やり直し悪徳領主に…'),
+          (title: '人生重来的恶德领主不知悔改！ 1', serverSeries: null),
+          (title: '人生重来的恶德领主不知悔改！ 2', serverSeries: 'やり直し悪徳領主に…'),
+          (title: '人生重来的恶德领主不知悔改！ 3', serverSeries: 'やり直し悪徳領主に…'),
         ],
         titleOf: (book) => book.title,
         serverSeriesTitleOf: (book) => book.serverSeries,

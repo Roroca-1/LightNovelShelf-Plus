@@ -3,24 +3,14 @@
 /// 服务端系列条目缺失时，书架仍能把「作品名 1 / 作品名 2」归到一起。只剥离
 /// 末尾明确的卷、册、集或纯数字，避免改动标题中间的数字。
 String seriesTitleFromBookTitle(String title) {
-  final original = title.trim();
-  final wrapper = RegExp(r'^(《|【)(.*)(》|】)$').firstMatch(original);
-  final hasMatchingWrapper =
-      wrapper != null &&
-      ((wrapper.group(1) == '《' && wrapper.group(3) == '》') ||
-          (wrapper.group(1) == '【' && wrapper.group(3) == '】'));
-  var value = hasMatchingWrapper ? wrapper.group(2)!.trim() : original;
-  final withoutVolume = value.replaceFirst(
+  var value = title.trim();
+  value = value.replaceFirst(
     RegExp(
       r'\s*(?:[（(]\s*)?(?:第\s*)?(?:\d+|[０-９]+|[〇零一二三四五六七八九十百千万萬两兩壹贰貳叁參肆伍陆陸柒捌玖拾佰仟]+|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+|[IVXivx]+)\s*(?:卷|冊|册|集|話|话|巻)?\s*[）)]?\s*$',
     ),
     '',
   );
-  if (withoutVolume.trim().isEmpty) return original;
-  value = withoutVolume.trim();
-  return hasMatchingWrapper
-      ? '${wrapper.group(1)}$value${wrapper.group(3)}'
-      : value;
+  return value.trim().isEmpty ? title.trim() : value.trim();
 }
 
 /// 返回书籍的稳定系列键。
