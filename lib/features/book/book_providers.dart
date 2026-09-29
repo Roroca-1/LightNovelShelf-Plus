@@ -7,7 +7,6 @@ import '../../data/api/api_client.dart';
 import '../../data/api/models.dart';
 import '../../data/providers.dart';
 import '../../data/repositories/shelf_draft.dart';
-import '../../data/repositories/local_comic_shelf_repository.dart';
 import '../../data/repositories/shelf_repository.dart';
 
 @immutable
@@ -36,6 +35,16 @@ final FutureProviderFamily<bool, int> bookInShelfProvider =
       return shelfContainsBook(snapshot.items, bookId);
     }, isAutoDispose: true);
 
+final FutureProviderFamily<bool, (int, ShelfItemType)>
+bookInShelfByTypeProvider = FutureProvider.family<bool, (int, ShelfItemType)>((
+  ref,
+  arg,
+) async {
+  final snapshot = await ref.watch(shelfProvider.future);
+  return snapshot != null &&
+      shelfContainsBook(snapshot.items, arg.$1, type: arg.$2);
+}, isAutoDispose: true);
+
 /// 书架按钮的乐观状态：`inShelf` 为 null 表示没有本地覆盖，沿用 [bookInShelfProvider]。
 @immutable
 class ShelfToggle {
@@ -55,10 +64,15 @@ class ShelfToggleController extends Notifier<ShelfToggle> {
   @override
   ShelfToggle build() => const ShelfToggle();
 
-  Future<void> toggle(bool inShelf) async {
+  Future<void> toggle(
+    bool inShelf, {
+    ShelfItemType type = ShelfItemType.book,
+  }) async {
     state = ShelfToggle(busy: true, inShelf: !inShelf);
     try {
-      final result = await ref.read(shelfProvider.notifier).toggleBook(arg);
+      final result = await ref
+          .read(shelfProvider.notifier)
+          .toggleBook(arg, type: type);
       if (!ref.mounted) return;
       state = ShelfToggle(inShelf: result);
     } catch (error) {
@@ -80,33 +94,5 @@ final NotifierProviderFamily<ShelfToggleController, ShelfToggle, int>
 shelfToggleProvider =
     NotifierProvider.family<ShelfToggleController, ShelfToggle, int>(
       ShelfToggleController.new,
-      isAutoDispose: true,
-    );
-
-class LocalComicShelfToggleController extends Notifier<ShelfToggle> {
-  LocalComicShelfToggleController(this.comicId);
-
-  final int comicId;
-
-  @override
-  ShelfToggle build() => const ShelfToggle();
-
-  Future<void> toggle(LocalShelfComic comic, bool inShelf) async {
-    state = ShelfToggle(busy: true, inShelf: !inShelf);
-    try {
-      final result = await ref
-          .read(localComicShelfProvider.notifier)
-          .toggle(comic);
-      if (ref.mounted) state = ShelfToggle(inShelf: result);
-    } catch (_) {
-      if (!ref.mounted) return;
-      state = ShelfToggle(error: '无法更新本地漫画书架。');
-    }
-  }
-}
-
-final localComicShelfToggleProvider =
-    NotifierProvider.family<LocalComicShelfToggleController, ShelfToggle, int>(
-      LocalComicShelfToggleController.new,
       isAutoDispose: true,
     );
