@@ -16,7 +16,7 @@ class ReadHistory {
   }
 }
 
-enum ShelfItemType { book, folder }
+enum ShelfItemType { book, comic, folder }
 
 /// 书架条目：书籍或文件夹。
 class ShelfItem {
@@ -31,11 +31,12 @@ class ShelfItem {
   });
 
   const ShelfItem.book({
+    this.type = ShelfItemType.book,
     required int id,
     required this.index,
     required this.parents,
     required this.updatedAt,
-  }) : type = ShelfItemType.book,
+  }) : assert(type != ShelfItemType.folder),
        bookId = id,
        folderId = null,
        title = '';
@@ -58,9 +59,12 @@ class ShelfItem {
   final String updatedAt;
   final String title;
 
-  bool get isBook => type == ShelfItemType.book;
+  bool get isBook => type != ShelfItemType.folder;
 
-  String get key => isBook ? 'BOOK:$bookId' : 'FOLDER:$folderId';
+  bool get isComic => type == ShelfItemType.comic;
+
+  String get key =>
+      isBook ? '${type.name.toUpperCase()}:$bookId' : 'FOLDER:$folderId';
 
   ShelfItem copyWith({
     int? index,
@@ -81,6 +85,8 @@ class ShelfItem {
     if (value == 'BOOK' || value == 'Book' || value == 0) {
       return ShelfItemType.book;
     }
+    if (value == 'NOVEL' || value == 'Novel') return ShelfItemType.book;
+    if (value == 'COMIC' || value == 'Comic') return ShelfItemType.comic;
     if (value == 'FOLDER' || value == 'Folder' || value == 1) {
       return ShelfItemType.folder;
     }
@@ -95,8 +101,9 @@ class ShelfItem {
     final updatedAt = asStringOrEmpty(item['updateAt'] ?? item['UpdateAt']);
     final rawId = item['id'] ?? item['Id'];
 
-    if (type == ShelfItemType.book) {
+    if (type != ShelfItemType.folder) {
       return ShelfItem.book(
+        type: type,
         id: asInt(rawId),
         index: index,
         parents: parents,
@@ -122,7 +129,11 @@ class ShelfItem {
     'index': index,
     'parents': parents,
     if (!isBook) 'title': title,
-    'type': isBook ? 'BOOK' : 'FOLDER',
+    'type': switch (type) {
+      ShelfItemType.book => 'NOVEL',
+      ShelfItemType.comic => 'COMIC',
+      ShelfItemType.folder => 'FOLDER',
+    },
     'updateAt': updatedAt,
   };
 }
