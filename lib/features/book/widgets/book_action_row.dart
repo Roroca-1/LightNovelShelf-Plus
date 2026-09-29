@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/repositories/local_comic_shelf_repository.dart';
+import '../../../data/api/models.dart';
 import '../../../shared/format.dart';
 import '../book_providers.dart';
 
@@ -13,7 +13,6 @@ class BookActionRow extends ConsumerWidget {
     required this.bundle,
     required this.currentIndex,
     required this.onRead,
-    required this.comicSeriesTitle,
   });
 
   final int bookId;
@@ -22,26 +21,18 @@ class BookActionRow extends ConsumerWidget {
   /// 当前阅读到的章节下标，`-1` 表示未读。
   final int currentIndex;
   final void Function(int sortNum) onRead;
-  final String comicSeriesTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).colorScheme;
     final detail = bundle.detail;
     final hasChapters = detail.chapters.isNotEmpty;
-    final shelf = bundle.isComic
-        ? ref.watch(localComicShelfToggleProvider(bookId))
-        : ref.watch(shelfToggleProvider(bookId));
-    final resolvedInShelf = bundle.isComic
-        ? shelf.inShelf ??
-              ref
-                  .watch(localComicShelfProvider)
-                  .value
-                  ?.any((comic) => comic.id == bookId) ??
-              false
-        : shelf.inShelf ??
-              ref.watch(bookInShelfProvider(bookId)).value ??
-              false;
+    final type = bundle.isComic ? ShelfItemType.comic : ShelfItemType.book;
+    final shelf = ref.watch(shelfToggleProvider(bookId));
+    final resolvedInShelf =
+        shelf.inShelf ??
+        ref.watch(bookInShelfByTypeProvider((bookId, type))).value ??
+        false;
     final continueTitle = currentIndex >= 0
         ? cleanChapterTitle(detail.chapters[currentIndex].title)
         : null;
@@ -54,70 +45,42 @@ class BookActionRow extends ConsumerWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: Material(
-                  color: resolvedInShelf
-                      ? colors.primaryContainer
-                      : colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(16),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: shelf.busy
-                        ? null
-                        : () {
-                            if (bundle.isComic) {
-                              final detail = bundle.detail;
-                              ref
-                                  .read(
-                                    localComicShelfToggleProvider(
-                                      bookId,
-                                    ).notifier,
-                                  )
-                                  .toggle(
-                                    LocalShelfComic(
-                                      id: bookId,
-                                      title: detail.title,
-                                      seriesTitle: comicSeriesTitle,
-                                      coverUrl: detail.coverUrl,
-                                      coverPlaceholder:
-                                          detail.coverPlaceholder,
-                                      authorName: detail.authorName,
-                                      lastUpdatedAt: detail.lastUpdatedAt,
-                                      addedAt: DateTime.now(),
-                                    ),
-                                    resolvedInShelf,
-                                  );
-                              return;
-                            }
-                            ref
-                                .read(shelfToggleProvider(bookId).notifier)
-                                .toggle(resolvedInShelf);
-                          },
-                    child: Center(
-                      child: shelf.busy
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                              ),
-                            )
-                          : Icon(
-                              resolvedInShelf
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_border,
-                              size: 25,
-                              color: resolvedInShelf
-                                  ? colors.onPrimaryContainer
-                                  : colors.onSurfaceVariant,
-                            ),
-                    ),
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: Material(
+                color: resolvedInShelf
+                    ? colors.primaryContainer
+                    : colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: shelf.busy
+                      ? null
+                      : () => ref
+                            .read(shelfToggleProvider(bookId).notifier)
+                            .toggle(resolvedInShelf, type: type),
+                  child: Center(
+                    child: shelf.busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.4),
+                          )
+                        : Icon(
+                            resolvedInShelf
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            size: 25,
+                            color: resolvedInShelf
+                                ? colors.onPrimaryContainer
+                                : colors.onSurfaceVariant,
+                          ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: SizedBox(
                 height: 56,
