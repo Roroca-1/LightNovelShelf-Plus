@@ -205,7 +205,6 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                 bookId: widget.id,
                 bundle: bundle,
                 currentIndex: currentIndex,
-                comicSeriesTitle: _seriesTitleOf(bundle),
                 onRead: (sortNum) => _openReader(bundle, sortNum),
               ),
               if (detail.introduction.trim().isNotEmpty)
