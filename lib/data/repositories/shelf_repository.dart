@@ -52,15 +52,17 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   }
 
   Future<ShelfSnapshot> _hydrate(List<ShelfItem> items, String? version) async {
-    final booksOnly = items.where((item) => item.isBook).map((item) => item.copyWith(parents: const <String>[])).toList();
+    final booksOnly = items
+        .where((item) => item.isBook)
+        .map((item) => item.copyWith(parents: const <String>[]))
+        .toList();
     final bookIds = booksOnly
         .where((item) => item.isBook)
         .map((item) => item.bookId!)
         .toList();
-    var books = await ref.read(bookMetadataCacheProvider).resolve(
-      bookIds,
-      _api.getBooksByIdsBatched,
-    );
+    var books = await ref
+        .read(bookMetadataCacheProvider)
+        .resolve(bookIds, _api.getBooksByIdsBatched);
     final missingAuthors = books
         .where(
           (book) =>
@@ -82,18 +84,20 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
           }
         }),
       );
-      final enriched = <int, BookListItem>{for (final book in books) book.id: book};
+      final enriched = <int, BookListItem>{
+        for (final book in books) book.id: book,
+      };
       for (final book in details) {
         enriched[book.id] = book;
       }
-      books = <BookListItem>[
-        for (final id in bookIds) ?enriched[id],
-      ];
+      books = <BookListItem>[for (final id in bookIds) ?enriched[id]];
       await ref.read(bookMetadataCacheProvider).putAll(books);
     }
     final availableIds = books.map((book) => book.id).toSet();
     return ShelfSnapshot(
-      items: sortShelfItems(booksOnly.where((item) => availableIds.contains(item.bookId)).toList()),
+      items: sortShelfItems(
+        booksOnly.where((item) => availableIds.contains(item.bookId)).toList(),
+      ),
       books: books,
       version: version,
     );
@@ -121,7 +125,12 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   Future<ShelfSnapshot> save(ShelfDraft draft) {
     final generation = ++_mutationGeneration;
     final normalized = ShelfDraft(
-      items: normalizeShelfIndexes(draft.items.where((item) => item.isBook).map((item) => item.copyWith(parents: const <String>[])).toList()),
+      items: normalizeShelfIndexes(
+        draft.items
+            .where((item) => item.isBook)
+            .map((item) => item.copyWith(parents: const <String>[]))
+            .toList(),
+      ),
       version: draft.version,
     );
     final operation = _saveQueue.then((_) async {
@@ -161,24 +170,38 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   }
 
   /// 没有缓存快照时回源查询。
-  Future<bool> contains(int bookId) async {
+  Future<bool> contains(
+    int bookId, {
+    ShelfItemType type = ShelfItemType.book,
+  }) async {
     final snapshot = state.value;
-    if (snapshot != null) return shelfContainsBook(snapshot.items, bookId);
+    if (snapshot != null) {
+      return shelfContainsBook(snapshot.items, bookId, type: type);
+    }
     final shelf = await _api.getBookShelf();
-    return shelfContainsBook(shelf.items, bookId);
+    return shelfContainsBook(shelf.items, bookId, type: type);
   }
 
   /// 加入/移出书架，返回操作后是否在书架中。
-  Future<bool> toggleBook(int bookId) async {
-    if (bookId <= 0) throw ArgumentError('无效的书籍 ID。');
+  Future<bool> toggleBook(
+    int bookId, {
+    ShelfItemType type = ShelfItemType.book,
+  }) async {
+    if (bookId <= 0) {
+      throw ArgumentError('无效的书籍 ID。');
+    }
     final shelf = await _api.getBookShelf();
-    final isInShelf = shelfContainsBook(shelf.items, bookId);
+    final isInShelf = shelfContainsBook(shelf.items, bookId, type: type);
     final items = isInShelf
         ? shelf.items
-              .where((item) => !item.isBook || item.bookId != bookId)
+              .where(
+                (item) =>
+                    !item.isBook || item.bookId != bookId || item.type != type,
+              )
               .toList()
         : <ShelfItem>[
             ShelfItem.book(
+              type: type,
               id: bookId,
               index: -1,
               parents: const <String>[],
