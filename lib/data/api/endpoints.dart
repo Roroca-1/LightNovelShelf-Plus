@@ -20,4 +20,4 @@ class ServiceEndpoints {
 }
 
 /// 书架结构版本号。
-const String shelfStructVersion = '20220211';
+const String shelfStructVersion = '20260921';

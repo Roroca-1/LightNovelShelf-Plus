@@ -73,19 +73,23 @@ Map<String, dynamic> _detailResponse(String bookType) => <String, dynamic>{
 };
 
 class _FakeApi extends ApiClient {
-  _FakeApi({this.forbidBookInfo = false, this.bookType = 'Novel'})
-    : super(
-        signalR: SignalRConnection(
-          endpoint: 'http://localhost/hub',
-          accessTokenFactory: () async => null,
-        ),
-        scheduler: RateLimitRequestScheduler(),
-        headers: () async => const <String, String>{},
-      );
+  _FakeApi({
+    this.forbidBookInfo = false,
+    this.bookType = 'Novel',
+    this.hasOtherSeriesBook = true,
+  }) : super(
+         signalR: SignalRConnection(
+           endpoint: 'http://localhost/hub',
+           accessTokenFactory: () async => null,
+         ),
+         scheduler: RateLimitRequestScheduler(),
+         headers: () async => const <String, String>{},
+       );
 
   /// 详情接口是否返回无权访问。
   final bool forbidBookInfo;
   final String bookType;
+  final bool hasOtherSeriesBook;
 
   final List<(String, Map<String, Object?>)> calls =
       <(String, Map<String, Object?>)>[];
@@ -105,7 +109,9 @@ class _FakeApi extends ApiClient {
         if (forbidBookInfo) {
           throw const ApiError(_forbiddenMessage, ApiErrorCategory.server);
         }
-        return decode(_detailResponse(bookType));
+        final response = _detailResponse(bookType);
+        if (!hasOtherSeriesBook) (response['Series'] as List).removeLast();
+        return decode(response);
       case 'GetBookListByTitle':
         return decode(<String, dynamic>{
           'Page': 1,
@@ -150,8 +156,13 @@ Future<({_FakeApi api, GoRouter router})> _open(
   String initialLocation = '/book/$_bookId',
   bool forbidBookInfo = false,
   String bookType = 'Novel',
+  bool hasOtherSeriesBook = true,
 }) async {
-  final api = _FakeApi(forbidBookInfo: forbidBookInfo, bookType: bookType);
+  final api = _FakeApi(
+    forbidBookInfo: forbidBookInfo,
+    bookType: bookType,
+    hasOtherSeriesBook: hasOtherSeriesBook,
+  );
   final router = GoRouter(
     initialLocation: initialLocation,
     routes: <RouteBase>[
@@ -225,7 +236,17 @@ void main() {
     expect(find.text('某本小说 第二卷'), findsOneWidget);
   });
 
-  testWidgets('漫画复用详情组件且保留本地收藏', (tester) async {
+  testWidgets('系列只有当前书籍时菜单不显示系列入口', (tester) async {
+    await _open(tester, hasOtherSeriesBook: false);
+
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, '系列'), findsNothing);
+    expect(find.widgetWithText(ListTile, '上传者'), findsOneWidget);
+  });
+
+  testWidgets('漫画复用详情组件，带加入书架入口', (tester) async {
     await _open(tester, bookType: 'Comic');
 
     expect(find.byType(BookDetailScreen), findsOneWidget);

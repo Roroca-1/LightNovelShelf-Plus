@@ -104,7 +104,6 @@ class BookMetadataCache {
       return ShelfSnapshot(
         items: (record['items'] as List<dynamic>).map(ShelfItem.decode).toList(),
         books: (record['books'] as List<dynamic>).map(BookListItem.decode).toList(),
-        version: record['version'] as String?,
       );
     } catch (_) {
       return null;
@@ -116,7 +115,6 @@ class BookMetadataCache {
     jsonEncode(<String, Object?>{
       'items': snapshot.items.map((item) => item.encode()).toList(),
       'books': snapshot.books.map((book) => book.encode()).toList(),
-      'version': snapshot.version,
     }),
   );
 

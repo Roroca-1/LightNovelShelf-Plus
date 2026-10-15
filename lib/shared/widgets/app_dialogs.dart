@@ -65,17 +65,18 @@ Future<String?> showAppTextPrompt({
   String confirmLabel = '确定',
   String cancelLabel = '取消',
 }) async {
-  final controller = TextEditingController(text: initial);
+  var input = initial;
   final result = await showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text(title),
-      content: TextField(
-        controller: controller,
+      content: TextFormField(
+        initialValue: initial,
+        onChanged: (value) => input = value,
         autofocus: true,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(hintText: hint),
-        onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
       ),
       actions: <Widget>[
         TextButton(
@@ -83,38 +84,15 @@ Future<String?> showAppTextPrompt({
           child: Text(cancelLabel),
         ),
         TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+          onPressed: () => Navigator.of(dialogContext).pop(input),
           child: Text(confirmLabel),
         ),
       ],
     ),
   );
-  controller.dispose();
   final text = result?.trim() ?? '';
   return text.isEmpty ? null : text;
 }
-
-/// 选项列表弹窗；返回 null 表示取消。
-Future<T?> showAppChoice<T extends Object>({
-  required BuildContext context,
-  required String title,
-  required List<(String label, T value)> options,
-}) => showDialog<T>(
-  context: context,
-  builder: (dialogContext) => SimpleDialog(
-    title: Text(title),
-    children: <Widget>[
-      for (final option in options)
-        SimpleDialogOption(
-          onPressed: () => Navigator.of(dialogContext).pop(option.$2),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Text(option.$1),
-          ),
-        ),
-    ],
-  ),
-);
 
 /// 轻提示，同一时间只保留一条。
 void showAppSnackBar(BuildContext context, String message) =>

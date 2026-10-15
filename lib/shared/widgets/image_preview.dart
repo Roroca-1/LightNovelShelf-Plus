@@ -166,10 +166,10 @@ class ContentImage extends StatelessWidget {
   }
 }
 
-/// 预览的变换层，承载进入、退出的位移与缩放。
+/// 预览的变换层，承载进入、退出、下拉的位移与缩放。
 const Key imagePreviewTransformKey = Key('image-preview-transform');
 
-/// 全屏图片预览：从来源位置放大进入，退出时缩回原位，支持捏合缩放与点击空白关闭。
+/// 全屏图片预览：复用 BookImage 占位与加载，等比贴合屏幕，支持缩放、下拉关闭及切换原图。
 ///
 /// [sourceRect] 是来源缩略图在屏幕上的矩形（[globalRectOf]），缺省时改用居中的淡入淡出加轻微缩放。
 Future<void> showImagePreview(
@@ -198,6 +198,9 @@ class _ImagePreview extends ConsumerStatefulWidget {
   final Rect? sourceRect;
   final Animation<double> animation;
 
+  /// 下拉关闭的位移阈值（逻辑像素），未达到则弹回。
+  static const double _dismissDistance = 120;
+
   @override
   ConsumerState<_ImagePreview> createState() => _ImagePreviewState();
 }
@@ -213,6 +216,19 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     reverseCurve: Curves.easeInCubic,
   );
 
+  /// 松手后把拖拽位移弹回原位的控制器。
+  late final AnimationController _settle = AnimationController(
+    duration: const Duration(milliseconds: 220),
+    vsync: this,
+  )..addListener(_onSettle);
+  late final Animation<double> _settleCurve = CurvedAnimation(
+    parent: _settle,
+    curve: Curves.easeOutCubic,
+  );
+
+  Offset _drag = Offset.zero;
+  Offset _settleFrom = Offset.zero;
+
   /// 按钮旋转固定 90° 一档，动画期间同时改 rotation 和 scale，转完仍是整图可见。
   late final AnimationController _rotate = AnimationController(
     duration: const Duration(milliseconds: 200),
@@ -223,10 +239,12 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     curve: Curves.easeOutCubic,
   );
 
-  /// 缓存键与 BookImage 一致，来源图已经下载过时直接命中。
-  late final ImageProvider _provider = CachedNetworkImageProvider(
-    widget.url,
-    cacheKey: BookImage.cacheKeyFor(widget.url),
+  late String _url = widget.url;
+  String? _originalUrl;
+
+  ImageProvider _providerFor(String url) => CachedNetworkImageProvider(
+    url,
+    cacheKey: BookImage.cacheKeyFor(url),
     cacheManager: appImageCacheManager,
   );
   late final PhotoViewController _photo = PhotoViewController();
@@ -248,11 +266,41 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
   void initState() {
     super.initState();
     _imageSize = contentImageMetadata(widget.url).size;
-    // 图床尺寸变体可能比 URL 元数据小，缩放和命中最终以解码尺寸为准。
+    final uri = Uri.tryParse(normalizeCoverUrl(widget.url));
+    final height = int.tryParse(uri?.queryParameters['height'] ?? '');
+    final size = _imageSize;
+    if (uri != null &&
+        contentImageMetadata(widget.url).blurHash != null &&
+        size != null &&
+        height != null &&
+        height > 0 &&
+        height % imageHeightStep == 0 &&
+        height < size.height) {
+      final query = Map<String, String>.of(uri.queryParameters)
+        ..remove('height');
+      _originalUrl = uri.replace(queryParameters: query).toString();
+      _imageSize = Size(size.width * height / size.height, height.toDouble());
+    }
+    _listenImageSize();
+  }
+
+  void _showOriginal() {
+    final url = _originalUrl;
+    if (url == null) return;
+    _rotate.stop();
+    _photo.reset();
+    setState(() {
+      _url = url;
+      _imageSize = contentImageMetadata(url).size;
+      _quarterTurns = 0;
+      _originalUrl = null;
+    });
     _listenImageSize();
   }
 
   void _listenImageSize() {
+    final previous = _sizeListener;
+    if (previous != null) _sizeStream?.removeListener(previous);
     final listener = ImageStreamListener((info, _) {
       if (!mounted) return;
       setState(
@@ -264,7 +312,7 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
       info.dispose();
     }, onError: (_, _) {});
     _sizeListener = listener;
-    _sizeStream = _provider.resolve(ImageConfiguration.empty)
+    _sizeStream = _providerFor(_url).resolve(ImageConfiguration.empty)
       ..addListener(listener);
   }
 
@@ -274,6 +322,7 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     if (listener != null) _sizeStream?.removeListener(listener);
     _rotate.dispose();
     _photo.dispose();
+    _settle.dispose();
     super.dispose();
   }
 
@@ -338,6 +387,34 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
     }
   }
 
+  void _onSettle() {
+    setState(() {
+      _drag = Offset.lerp(_settleFrom, Offset.zero, _settleCurve.value)!;
+    });
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _settle.stop();
+    _settleFrom = Offset.zero;
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    setState(() => _drag += details.delta);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.velocity.pixelsPerSecond.dy;
+    final dismissed =
+        _drag.dy.abs() >= _ImagePreview._dismissDistance ||
+        velocity.abs() > 700;
+    if (dismissed) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _settleFrom = _drag;
+    _settle.forward(from: 0);
+  }
+
   /// 进入动画的缩放起点，按来源缩略图与屏幕的尺寸比算。
   double _beginScale(Size screen) {
     final rect = widget.sourceRect;
@@ -347,11 +424,13 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
         .clamp(0.05, 1.0);
   }
 
-  Matrix4 _transform(Size screen, double progress) {
+  Matrix4 _transform(Size screen, double progress, double dragProgress) {
     final center = Offset(screen.width / 2, screen.height / 2);
     final from = widget.sourceRect?.center ?? center;
-    final scale = ui.lerpDouble(_beginScale(screen), 1, progress)!;
-    final origin = Offset.lerp(from, center, progress)!;
+    final scale =
+        ui.lerpDouble(_beginScale(screen), 1, progress)! *
+        (1 - 0.2 * dragProgress);
+    final origin = Offset.lerp(from, center, progress)! + _drag;
     return Matrix4.translationValues(origin.dx, origin.dy, 0) *
         Matrix4.diagonal3Values(scale, scale, 1) *
         Matrix4.translationValues(-center.dx, -center.dy, 0);
@@ -361,20 +440,30 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
     final fit = _fitScale(screen, _quarterTurns);
-    final image = PhotoView(
-      imageProvider: _provider,
-      controller: _photo,
-      backgroundDecoration: const BoxDecoration(color: Colors.transparent),
-      // 尺寸已知时按当前旋转角给出贴合缩放，否则退回 PhotoView 自己算的贴合值。
-      minScale: fit ?? PhotoViewComputedScale.contained,
-      maxScale: PhotoViewComputedScale.covered * 6,
-      onTapUp: (_, details, _) => _onPreviewTap(details, screen),
-      loadingBuilder: (context, _) =>
-          const Center(child: CircularProgressIndicator(color: Colors.white)),
-      errorBuilder: (context, _, _) => const Center(
-        child: Text(
-          '图片加载失败',
-          style: TextStyle(color: Colors.white, fontSize: 14),
+    final imageSize = _imageSize ?? screen;
+    final image = PhotoViewGestureDetectorScope(
+      axis: Axis.vertical,
+      child: GestureDetector(
+        onVerticalDragStart: _onDragStart,
+        onVerticalDragUpdate: _onDragUpdate,
+        onVerticalDragEnd: _onDragEnd,
+        child: PhotoView.customChild(
+          key: ValueKey(_url),
+          childSize: imageSize,
+          controller: _photo,
+          backgroundDecoration: const BoxDecoration(color: Colors.transparent),
+          initialScale: fit ?? PhotoViewComputedScale.contained,
+          minScale: fit ?? PhotoViewComputedScale.contained,
+          maxScale: PhotoViewComputedScale.covered * 6,
+          onTapUp: (_, details, _) => _onPreviewTap(details, screen),
+          child: BookImage(
+            url: _url,
+            displayHeight: imageSize.height,
+            blurHash: contentImageMetadata(_url).blurHash,
+            aspectRatio: imageSize.height / imageSize.width,
+            fit: BoxFit.contain,
+            requestSizedVariant: false,
+          ),
         ),
       ),
     );
@@ -386,17 +475,27 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
         animation: _entry,
         builder: (context, child) {
           final progress = _entry.value.clamp(0.0, 1.0);
-          final chromeOpacity = progress;
+          final dragProgress =
+              (_drag.distance / (_ImagePreview._dismissDistance * 2)).clamp(
+                0.0,
+                1.0,
+              );
+          final chromeOpacity = (progress * (1 - dragProgress)).clamp(0.0, 1.0);
           return ColoredBox(
-            color: Colors.black.withValues(alpha: 0.96 * progress),
+            color: Colors.black.withValues(
+              alpha: 0.96 * progress * (1 - 0.55 * dragProgress),
+            ),
             child: Stack(
               children: <Widget>[
                 Positioned.fill(
                   child: Opacity(
-                    opacity: progress,
+                    opacity: (progress * (1 - 0.35 * dragProgress)).clamp(
+                      0.0,
+                      1.0,
+                    ),
                     child: Transform(
                       key: imagePreviewTransformKey,
-                      transform: _transform(screen, progress),
+                      transform: _transform(screen, progress, dragProgress),
                       child: child,
                     ),
                   ),
@@ -414,6 +513,27 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
                     ),
                   ),
                 ),
+                if (_originalUrl != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: MediaQuery.paddingOf(context).bottom + 76,
+                    child: Opacity(
+                      opacity: chromeOpacity,
+                      child: Center(
+                        child: TextButton(
+                          onPressed: chromeOpacity >= 0.5 && _running == null
+                              ? _showOriginal
+                              : null,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: Colors.black45,
+                          ),
+                          child: const Text('显示原图'),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   left: 0,
                   right: 0,
@@ -428,12 +548,12 @@ class _ImagePreviewState extends ConsumerState<_ImagePreview>
                         onRotateRight: () => _rotateBy(1, screen),
                         onShare: (origin) => _run(
                           _PreviewAction.share,
-                          () => shareImage(widget.url, origin: origin),
+                          () => shareImage(_url, origin: origin),
                         ),
                         onSave: () => _run(
                           _PreviewAction.save,
                           () => saveImage(
-                            widget.url,
+                            _url,
                             ownFolder: ref
                                 .read(appSettingsProvider)
                                 .imageSaveToOwnFolder,

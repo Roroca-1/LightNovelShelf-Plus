@@ -27,7 +27,7 @@ class BookActionRow extends ConsumerWidget {
     final colors = Theme.of(context).colorScheme;
     final detail = bundle.detail;
     final hasChapters = detail.chapters.isNotEmpty;
-    final type = bundle.isComic ? ShelfItemType.comic : ShelfItemType.book;
+    final type = bundle.isComic ? ShelfItemType.comic : ShelfItemType.novel;
     final shelf = ref.watch(shelfToggleProvider(bookId));
     final resolvedInShelf =
         shelf.inShelf ??

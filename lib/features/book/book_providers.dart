@@ -16,6 +16,10 @@ class BookDetailBundle {
   final BookDetail detail;
 
   bool get isComic => detail.type == BookType.comic;
+
+  /// 这本书在书架里的条目类型。
+  ShelfItemType get shelfType =>
+      isComic ? ShelfItemType.comic : ShelfItemType.novel;
 }
 
 /// autoDispose：书籍数量无上限，常驻缓存会持续增长。
@@ -66,7 +70,7 @@ class ShelfToggleController extends Notifier<ShelfToggle> {
 
   Future<void> toggle(
     bool inShelf, {
-    ShelfItemType type = ShelfItemType.book,
+    ShelfItemType type = ShelfItemType.novel,
   }) async {
     state = ShelfToggle(busy: true, inShelf: !inShelf);
     try {

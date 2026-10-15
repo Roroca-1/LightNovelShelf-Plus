@@ -21,9 +21,12 @@ import '../../shared/paging/identity_child_delegate.dart';
 import '../../shared/widgets/app_dialogs.dart';
 import '../../shared/widgets/book_grid_slivers.dart';
 import '../../shared/widgets/book_list_row.dart';
+import '../../shared/widgets/check_menu_button.dart';
 import '../../shared/widgets/state_views.dart';
 import '../discover/widgets/novel_series_tile.dart';
 import 'shelf_editor_controller.dart';
+import 'shelf_filter.dart';
+import 'widgets/shelf_folder_picker.dart';
 import 'shelf_series_books_screen.dart';
 import 'widgets/shelf_manage_sheet.dart';
 import 'widgets/shelf_tile.dart';
@@ -174,12 +177,10 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
 
   List<String> get _parents => widget.parents;
 
-  String get _editorKey => shelfEditorKey(_parents);
-
   ShelfEditorController get _editor =>
-      ref.read(shelfEditorProvider(_editorKey).notifier);
+      ref.read(shelfEditorProvider.notifier);
 
-  ShelfEditorState get _state => ref.read(shelfEditorProvider(_editorKey));
+  ShelfEditorState get _state => ref.read(shelfEditorProvider);
 
   String _titleSortKey(String title) => _sortKeyCache.putIfAbsent(title, () {
     final normalized = title.trim().toLowerCase();
@@ -238,8 +239,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   /// 放弃草稿；有改动时先确认，返回是否已经放弃。
   Future<bool> _discard() async {
     if (_state.draft == null) return true;
-    final snapshot = ref.read(shelfProvider).value;
-    if (snapshot != null && _editor.isDirty(snapshot)) {
+    if (ref.read(shelfDirtyProvider)) {
       final ok = await showAppConfirm(
         context: context,
         title: '放弃修改',
@@ -252,26 +252,6 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     return true;
   }
 
-  /// 选择移动目标；返回空列表代表根文件夹，返回 null 代表取消。
-  Future<List<String>?> _pickDestination(ShelfDraft draft) {
-    final editor = _editor;
-    final destinations = <(String label, List<String> path)>[
-      if (_parents.isNotEmpty) ('根文件夹', const <String>[]),
-      for (final folder in shelfFolderPaths(draft))
-        if (!editor.isCurrentPath(folder.path))
-          (editor.pathLabel(draft, folder.path), folder.path),
-    ];
-    if (destinations.isEmpty) {
-      editor.reportError('还没有可用的目标文件夹，请先新建一个。');
-      return Future<List<String>?>.value();
-    }
-    return showAppChoice<List<String>>(
-      context: context,
-      title: '移动到文件夹',
-      options: destinations,
-    );
-  }
-
   ShelfManageCommand get _modeCommand => switch (_state.mode) {
     ShelfMode.browse => ShelfManageCommand.browse,
     ShelfMode.select => ShelfManageCommand.select,
@@ -279,10 +259,12 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   };
 
   Future<void> _openManageSheet() async {
-    final snapshot = ref.read(shelfProvider).value;
-    if (snapshot == null) return;
+    final draft = ref.read(shelfDraftProvider);
+    if (draft == null) return;
     final editor = _editor;
-    final dirty = editor.isDirty(snapshot);
+    final folders = editor.selectedFolders(draft);
+    final books = editor.selectedBooks(draft);
+    final dirty = ref.read(shelfDirtyProvider);
     final command = await ShelfManageSheet.show(
       context,
       activeMode: _modeCommand,
@@ -290,6 +272,12 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         ShelfManageCommand.browse,
         ShelfManageCommand.drag,
         ShelfManageCommand.select,
+        ShelfManageCommand.createFolder,
+        if (folders.length == 1 && books.isEmpty)
+          ShelfManageCommand.renameFolder,
+        if (folders.isNotEmpty && books.isEmpty)
+          ShelfManageCommand.deleteFolder,
+        if (_state.selected.isNotEmpty) ShelfManageCommand.moveItems,
         if (_state.selected.isNotEmpty) ShelfManageCommand.removeItems,
         if (dirty) ShelfManageCommand.save,
         if (dirty) ShelfManageCommand.discard,
@@ -313,8 +301,8 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         await _renameFolder();
       case ShelfManageCommand.deleteFolder:
         await _deleteFolders();
-      case ShelfManageCommand.moveBooks:
-        await _moveBooks();
+      case ShelfManageCommand.moveItems:
+        await _moveItems();
       case ShelfManageCommand.removeItems:
         await _removeItems();
       case ShelfManageCommand.save:
@@ -325,20 +313,24 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   }
 
   Future<void> _createFolder() async {
+    final draft = ref.read(shelfDraftProvider);
+    if (draft == null) return;
     final name = await showAppTextPrompt(
       context: context,
-      title: '新建文件夹',
+      title: _parents.isEmpty
+          ? '新建文件夹'
+          : '在「${shelfFolderTitle(draft, _parents.last)}」下新建文件夹',
       hint: '请输入文件夹名称',
     );
     if (name == null || !mounted) return;
-    _editor.createFolder(name);
+    _editor.createFolder(name, parents: _parents);
   }
 
   Future<void> _renameFolder() async {
-    final snapshot = ref.read(shelfProvider).value;
-    if (snapshot == null) return;
+    final draft = ref.read(shelfDraftProvider);
+    if (draft == null) return;
     final editor = _editor;
-    final folders = editor.selectedFolders(editor.effectiveDraft(snapshot));
+    final folders = editor.selectedFolders(draft);
     if (folders.length != 1) return;
     final folder = folders.single;
     final name = await showAppTextPrompt(
@@ -352,61 +344,56 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   }
 
   Future<void> _deleteFolders() async {
-    final snapshot = ref.read(shelfProvider).value;
-    if (snapshot == null) return;
+    final draft = ref.read(shelfDraftProvider);
+    if (draft == null) return;
     final editor = _editor;
-    final folders = editor.selectedFolders(editor.effectiveDraft(snapshot));
+    final folders = editor.selectedFolders(draft);
     if (folders.isEmpty) return;
     final ok = await showAppConfirm(
       context: context,
       title: '删除文件夹',
-      message: '将删除所选的 ${folders.length} 个文件夹，其中的书籍会移回书架根目录。',
+      message: '将删除所选的 ${folders.length} 个文件夹，其中的内容会移到上一层。',
       confirmLabel: '删除',
     );
     if (!ok || !mounted) return;
     editor.deleteFolders(folders);
   }
 
-  Future<void> _moveBooks() async {
-    final snapshot = ref.read(shelfProvider).value;
-    if (snapshot == null) return;
+  Future<void> _moveItems() async {
+    final draft = ref.read(shelfDraftProvider);
+    final selected = _state.selected;
+    if (draft == null || selected.isEmpty) return;
     final editor = _editor;
-    final draft = editor.effectiveDraft(snapshot);
-    final books = editor.selectedBooks(draft);
-    if (books.isEmpty) return;
-    final destination = await _pickDestination(draft);
-    if (destination == null || !mounted) return;
-    editor.moveBooks(
-      bookIds: books.map((item) => item.bookId!).toList(),
-      destination: destination,
+    final target = await ShelfFolderPicker.show(
+      context,
+      draft: draft,
+      movingKeys: Set<String>.of(selected),
+      currentParents: _parents,
+    );
+    if (target == null || !mounted) return;
+    editor.moveItems(
+      keys: Set<String>.of(selected),
+      destination: target.parents,
+      newFolderName: target.newFolderName,
     );
   }
 
   Future<void> _removeItems() async {
-    final snapshot = ref.read(shelfProvider).value;
+    final draft = ref.read(shelfDraftProvider);
     final selected = _state.selected;
-    if (snapshot == null || selected.isEmpty) return;
+    if (draft == null || selected.isEmpty) return;
     final editor = _editor;
-    final draft = editor.effectiveDraft(snapshot);
-    final ids = editor.selectedBooks(draft).map((item) => item.bookId!).toSet();
-    if (ids.isEmpty) return;
+    final hasFolder = editor.selectedFolders(draft).isNotEmpty;
     final ok = await showAppConfirm(
       context: context,
       title: '移出书架',
-      message: '将从书架移出 ${ids.length} 本书，阅读记录不受影响。',
+      message: hasFolder
+          ? '所选文件夹及其中的 ${shelfSelectionBookCount(draft, selected)} 本书会一起移出书架，阅读记录不受影响。'
+          : '将从书架移出 ${shelfSelectionBookCount(draft, selected)} 本书，阅读记录不受影响。',
       confirmLabel: '移出',
     );
     if (!ok || !mounted) return;
-    try {
-      final removed = await ref.read(shelfProvider.notifier).removeBooks(ids);
-      editor.setMode(ShelfMode.browse);
-      if (mounted) ScaffoldMessenger.of(context).showText('已从书架移出 $removed 本书');
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showText(describeShelfError(error, fallback: '无法移出所选书籍。'));
-      }
-    }
+    editor.removeItems(Set<String>.of(selected));
   }
 
   void _openFolder(String folderId) {
@@ -523,6 +510,28 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
     );
   }
 
+  Widget _filterMenu() {
+    final filter = ref.watch(shelfFilterProvider);
+    final colors = Theme.of(context).colorScheme;
+    return CheckMenuButton<ShelfFilter>(
+      tooltip: '筛选',
+      value: filter,
+      icon: Icon(
+        filter == ShelfFilter.all ? Icons.filter_list : Icons.filter_alt,
+        color: filter == ShelfFilter.all ? null : colors.primary,
+      ),
+      entries: <CheckMenuEntry<ShelfFilter>>[
+        for (final option in ShelfFilter.values)
+          CheckMenuEntry<ShelfFilter>(
+            value: option,
+            icon: option.icon,
+            label: option.label,
+          ),
+      ],
+      onSelected: ref.read(shelfFilterProvider.notifier).select,
+    );
+  }
+
   Widget _banner(
     String message, {
     required VoidCallback onAction,
@@ -620,19 +629,19 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
             (auth.status == AuthenticationStatus.unknown ||
                 auth.status == AuthenticationStatus.refreshing));
     final async = ref.watch(shelfProvider);
-    final editor = ref.watch(shelfEditorProvider(_editorKey));
+    final editor = ref.watch(shelfEditorProvider);
     final snapshot = async.value;
     final localComics =
         ref.watch(localComicShelfProvider).value ?? const <LocalShelfComic>[];
     final controller = _editor;
-    final dirty = snapshot != null && controller.isDirty(snapshot);
-    final draft = snapshot == null ? null : controller.effectiveDraft(snapshot);
+    final dirty = ref.watch(shelfDirtyProvider);
+    final draft = ref.watch(shelfDraftProvider);
     final title = _parents.isEmpty || draft == null
         ? '书架'
-        : controller.folderTitle(draft, _parents.last);
+        : shelfFolderTitle(draft, _parents.last);
 
     return PopScope<Object?>(
-      canPop: !dirty,
+      canPop: !dirty || _parents.isNotEmpty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final discarded = await _discard();
@@ -734,6 +743,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
                         ),
                       )
                     : TextButton(onPressed: _save, child: const Text('保存')),
+              if (snapshot != null && editor.mode != ShelfMode.drag) _filterMenu(),
               IconButton(
                 tooltip: '管理书架',
                 onPressed: snapshot == null ? null : _openManageSheet,
@@ -802,18 +812,22 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       );
     }
 
-    final level = _editor.level(snapshot, draft);
+    final filter = ref.watch(shelfLevelFilterProvider);
+    final level = ref.watch(shelfLevelProvider(shelfLevelKey(_parents)));
     final serverSiblings = editor.mode == ShelfMode.browse
         ? _sortedSiblings(level)
         : level.siblings;
     final localBooks = <int, BookListItem>{};
     final localItems = <ShelfItem>[];
-    if (_parents.isEmpty && editor.mode == ShelfMode.browse) {
+    if (_parents.isEmpty && editor.mode == ShelfMode.browse && filter != ShelfFilter.novel) {
+      final serverComicIds = draft.items.where((item) => item.isComic).map((item) => item.bookId).toSet();
       for (final comic in localComics) {
+        if (serverComicIds.contains(comic.id)) continue;
         final localId = -comic.id;
         localBooks[localId] = comic.toBookListItem();
         localItems.add(
           ShelfItem.book(
+            type: ShelfItemType.comic,
             id: localId,
             index: -1,
             parents: const <String>[],
@@ -827,7 +841,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
       bookById: <int, BookListItem>{...level.bookById, ...localBooks},
       folderPreviews: level.folderPreviews,
     );
-    final siblings = _sort == ShelfSortSetting.manual
+    final siblings = editor.mode != ShelfMode.browse || _sort == ShelfSortSetting.manual
         ? displayLevel.siblings
         : (List<ShelfItem>.of(displayLevel.siblings)..sort(
             (left, right) => _compareShelfItems(left, right, displayLevel),
@@ -854,7 +868,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(
-                    _editor.pathLabel(draft, _parents),
+                    _parents.map((id) => shelfFolderTitle(draft, id)).join(' / '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -891,7 +905,12 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         if (siblings.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: EmptyStateView(
+            child: filter != ShelfFilter.all
+              ? EmptyStateView(icon: Icons.filter_alt_off_outlined,
+                  title: filter == ShelfFilter.comic ? '这里没有漫画' : '这里没有小说',
+                  actionLabel: '全部显示',
+                  onAction: () => ref.read(shelfFilterProvider.notifier).select(ShelfFilter.all))
+              : EmptyStateView(
               icon: _parents.isEmpty
                   ? Icons.collections_bookmark_outlined
                   : Icons.folder_open_outlined,
@@ -926,7 +945,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
                 itemBuilder: (_, item, index) => KeyedSubtree(
                   key: _itemKey(item),
                   child: ShelfTile(
-                    editorKey: _editorKey,
+                    parents: _parents,
                     item: item,
                     index: index,
                     siblings: siblings,
@@ -1018,11 +1037,15 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
         return Card(
           margin: EdgeInsets.zero,
           child: ListTile(
-            onTap: () => _openFolder(item.folderId!),
+            selected: _state.selected.contains(item.key),
+            onLongPress: () => _editor.beginSelection(item),
+            onTap: () => _state.mode == ShelfMode.select
+                ? _editor.toggleSelection(item)
+                : _openFolder(item.folderId!),
             leading: const Icon(Icons.folder_outlined),
             title: Text(title.isEmpty ? '未命名文件夹' : title),
             subtitle: Text(
-              '${level.folderPreviews[item.folderId]?.count ?? 0} 本书',
+              '${level.folderPreviews[item.folderId]?.bookCount ?? 0} 本书',
             ),
             trailing: const Icon(Icons.chevron_right),
           ),
@@ -1080,11 +1103,15 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
               return Card(
                 margin: EdgeInsets.zero,
                 child: ListTile(
-                  onTap: () => _openFolder(item.folderId!),
+                  selected: _state.selected.contains(item.key),
+            onLongPress: () => _editor.beginSelection(item),
+            onTap: () => _state.mode == ShelfMode.select
+                ? _editor.toggleSelection(item)
+                : _openFolder(item.folderId!),
                   leading: const Icon(Icons.folder_outlined),
                   title: Text(title.isEmpty ? '未命名文件夹' : title),
                   subtitle: Text(
-                    '${level.folderPreviews[item.folderId]?.count ?? 0} 本书',
+                    '${level.folderPreviews[item.folderId]?.bookCount ?? 0} 本书',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                 ),
@@ -1211,7 +1238,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
           }
           final item = entry as ShelfItem;
           return ShelfTile(
-            editorKey: _editorKey,
+            parents: _parents,
             item: item,
             index: level.siblings.indexOf(item),
             siblings: level.siblings,

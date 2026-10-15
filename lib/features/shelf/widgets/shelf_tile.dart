@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/api/models.dart';
+import '../../../data/repositories/shelf_draft.dart';
+import '../../../data/repositories/shelf_repository.dart';
 import '../../../shared/layout/book_grid_layout.dart';
 import '../../../shared/widgets/book_cover_grid_item.dart';
 import '../shelf_editor_controller.dart';
@@ -13,7 +15,7 @@ import 'unavailable_book_tile.dart';
 class ShelfTile extends ConsumerWidget {
   const ShelfTile({
     super.key,
-    required this.editorKey,
+    required this.parents,
     required this.item,
     required this.index,
     required this.siblings,
@@ -28,7 +30,8 @@ class ShelfTile extends ConsumerWidget {
     this.onFocusChange,
   });
 
-  final String editorKey;
+  /// 所在层的完整路径，拖拽重排要告诉 controller 重排的是哪一层。
+  final List<String> parents;
   final ShelfItem item;
   final int index;
   final List<ShelfItem> siblings;
@@ -52,15 +55,16 @@ class ShelfTile extends ConsumerWidget {
       open?.call();
       return;
     }
-    final provider = shelfEditorProvider(editorKey);
-    final editor = ref.read(provider.notifier);
+    final editor = ref.read(shelfEditorProvider.notifier);
     final keyboard = HardwareKeyboard.instance;
     if (selectable &&
-        (keyboard.isControlPressed || keyboard.isMetaPressed || keyboard.isShiftPressed)) {
+        (keyboard.isControlPressed ||
+            keyboard.isMetaPressed ||
+            keyboard.isShiftPressed)) {
       onModifiedSelection?.call(item, keyboard.isShiftPressed);
       return;
     }
-    if (ref.read(provider).mode == ShelfMode.select) {
+    if (ref.read(shelfEditorProvider).mode == ShelfMode.select) {
       editor.toggleSelection(item);
       return;
     }
@@ -73,14 +77,14 @@ class ShelfTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final provider = shelfEditorProvider(editorKey);
     final selected = ref.watch(
-      provider.select((state) => state.selected.contains(item.key)),
+      shelfEditorProvider.select((state) => state.selected.contains(item.key)),
     );
     final sorting = ref.watch(
-      provider.select((state) => state.mode == ShelfMode.drag),
+      shelfEditorProvider.select((state) => state.mode == ShelfMode.drag),
     );
-    void beginSelection() => ref.read(provider.notifier).beginSelection(item);
+    void beginSelection() =>
+        ref.read(shelfEditorProvider.notifier).beginSelection(item);
 
     final Widget tile;
     if (item.isBook) {
@@ -112,8 +116,12 @@ class ShelfTile extends ConsumerWidget {
       final title = item.title.trim();
       tile = ShelfFolderTile(
         title: title.isEmpty ? '未命名文件夹' : title,
-        covers: preview.covers,
-        childCount: preview.count,
+        covers: [
+          for (final id in preview.bookIds)
+            ?ref.read(shelfProvider).value?.bookById[id],
+        ],
+        bookCount: preview.bookCount,
+        folderCount: preview.folderCount,
         selected: selected,
         sorting: sorting,
         onTap: () => _handleTap(ref, () => onOpenFolder(folderId)),
@@ -125,8 +133,8 @@ class ShelfTile extends ConsumerWidget {
       bindings: selectable
           ? <ShortcutActivator, VoidCallback>{
               const SingleActivator(LogicalKeyboardKey.space): () {
-                if (ref.read(provider).mode == ShelfMode.select) {
-                  ref.read(provider.notifier).toggleSelection(item);
+                if (ref.read(shelfEditorProvider).mode == ShelfMode.select) {
+                  ref.read(shelfEditorProvider.notifier).toggleSelection(item);
                 } else {
                   beginSelection();
                 }
@@ -138,8 +146,9 @@ class ShelfTile extends ConsumerWidget {
     if (!sorting) return keyboardTile;
     return DragTarget<int>(
       onWillAcceptWithDetails: (details) => details.data != index,
-      onAcceptWithDetails: (details) =>
-          ref.read(provider.notifier).reorder(siblings, details.data, index),
+      onAcceptWithDetails: (details) => ref
+          .read(shelfEditorProvider.notifier)
+          .reorder(siblings, details.data, index, parents: parents),
       builder: (context, candidate, _) => LongPressDraggable<int>(
         data: index,
         delay: const Duration(milliseconds: 180),

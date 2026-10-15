@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' show PointerDeviceKind;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -58,10 +57,11 @@ Future<int Function()> _pumpBlock(
 }
 
 String _previewUrl(WidgetTester tester) {
-  final provider = tester
-      .widget<PhotoView>(find.byType(PhotoView))
-      .imageProvider;
-  return (provider! as CachedNetworkImageProvider).url;
+  final preview = find.descendant(
+    of: find.byType(PhotoView),
+    matching: find.byType(BookImage),
+  );
+  return tester.widget<BookImage>(preview).url;
 }
 
 const _plainImage =
@@ -85,7 +85,7 @@ void main() {
     expect(find.byType(PhotoView), findsOneWidget);
     // 原图 40x60，放大、旋转并平移后，中心仍是图内。
     photo.controller!
-      ..scale = 15
+      ..scale = 12
       ..rotation = math.pi / 2
       ..position = const Offset(100, 0);
     tap(const Offset(500, 300));
@@ -148,6 +148,48 @@ void main() {
         .controller!;
     expect(controller.rotation, closeTo(math.pi / 2, 0.001));
     expect(controller.scale, closeTo(800 / 60, 0.001));
+  });
+
+  testWidgets('缩略图预览可切换原图并保持同一地址渲染', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showImagePreview(
+                context,
+                url:
+                    'https://img.example/large.webp?size=400x600&placeholder=$_hash&height=256',
+              ),
+              child: const Text('打开预览'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开预览'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('显示原图'), findsOneWidget);
+    expect(_previewUrl(tester), contains('height=256'));
+    await tester.tap(find.text('显示原图'));
+    await tester.pump();
+    expect(_previewUrl(tester), isNot(contains('height=')));
+    expect(find.text('显示原图'), findsNothing);
+    expect(
+      tester.widget<PhotoView>(find.byType(PhotoView)).minScale,
+      closeTo(1, 0.001),
+    );
+  });
+
+  testWidgets('预览向下拖动可关闭', (tester) async {
+    await _pumpBlock(tester);
+    await tester.tap(find.byType(BookImage));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(find.byType(PhotoView), const Offset(0, 180));
+    await tester.pumpAndSettle();
+    expect(find.byType(PhotoView), findsNothing);
   });
 
   testWidgets('裸图片成块，段落内图片保持行内布局', (tester) async {

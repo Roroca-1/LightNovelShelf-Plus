@@ -51,12 +51,8 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
     }
   }
 
-  Future<ShelfSnapshot> _hydrate(List<ShelfItem> items, String? version) async {
-    final booksOnly = items
-        .where((item) => item.isBook)
-        .map((item) => item.copyWith(parents: const <String>[]))
-        .toList();
-    final bookIds = booksOnly
+  Future<ShelfSnapshot> _hydrate(List<ShelfItem> items) async {
+    final bookIds = items
         .where((item) => item.isBook)
         .map((item) => item.bookId!)
         .toList();
@@ -93,21 +89,14 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
       books = <BookListItem>[for (final id in bookIds) ?enriched[id]];
       await ref.read(bookMetadataCacheProvider).putAll(books);
     }
-    final availableIds = books.map((book) => book.id).toSet();
-    return ShelfSnapshot(
-      items: sortShelfItems(
-        booksOnly.where((item) => availableIds.contains(item.bookId)).toList(),
-      ),
-      books: books,
-      version: version,
-    );
+    return ShelfSnapshot(items: sortShelfItems(items), books: books);
   }
 
   Future<ShelfSnapshot> _load() async {
     await _saveQueue;
     final generation = _mutationGeneration;
     final shelf = await _api.getBookShelf();
-    final snapshot = await _hydrate(shelf.items, shelf.version);
+    final snapshot = await _hydrate(shelf.items);
     if (generation != _mutationGeneration) {
       return state.value ?? snapshot;
     }
@@ -124,19 +113,9 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
 
   Future<ShelfSnapshot> save(ShelfDraft draft) {
     final generation = ++_mutationGeneration;
-    final normalized = ShelfDraft(
-      items: normalizeShelfIndexes(
-        draft.items
-            .where((item) => item.isBook)
-            .map((item) => item.copyWith(parents: const <String>[]))
-            .toList(),
-      ),
-      version: draft.version,
-    );
+    final normalized = ShelfDraft(items: normalizeShelfIndexes(draft.items));
     final operation = _saveQueue.then((_) async {
-      await _api.saveBookShelf(
-        UserShelf(version: normalized.version, items: normalized.items),
-      );
+      await _api.saveBookShelf(UserShelf(items: normalized.items));
       final knownBooks = <int, BookListItem>{
         for (final book in state.value?.books ?? const <BookListItem>[])
           book.id: book,
@@ -157,7 +136,6 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
         books: knownBooks.values
             .where((book) => nextIds.contains(book.id))
             .toList(),
-        version: normalized.version,
       );
       if (generation == _mutationGeneration) {
         state = AsyncValue<ShelfSnapshot?>.data(snapshot);
@@ -172,7 +150,7 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   /// 没有缓存快照时回源查询。
   Future<bool> contains(
     int bookId, {
-    ShelfItemType type = ShelfItemType.book,
+    ShelfItemType type = ShelfItemType.novel,
   }) async {
     final snapshot = state.value;
     if (snapshot != null) {
@@ -185,7 +163,7 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   /// 加入/移出书架，返回操作后是否在书架中。
   Future<bool> toggleBook(
     int bookId, {
-    ShelfItemType type = ShelfItemType.book,
+    ShelfItemType type = ShelfItemType.novel,
   }) async {
     if (bookId <= 0) {
       throw ArgumentError('无效的书籍 ID。');
@@ -209,7 +187,7 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
             ),
             ...shelf.items,
           ];
-    await save(ShelfDraft(items: items, version: shelf.version));
+    await save(ShelfDraft(items: items));
     return !isInShelf;
   }
 
@@ -237,7 +215,6 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
             ),
           ...shelf.items,
         ],
-        version: shelf.version,
       ),
     );
     return missing.length;
@@ -257,7 +234,6 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
         items: shelf.items
             .where((item) => !item.isBook || !ids.contains(item.bookId))
             .toList(),
-        version: shelf.version,
       ),
     );
     return removed;
