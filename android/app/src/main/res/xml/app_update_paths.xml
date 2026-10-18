@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 与 Dart 侧 getTemporaryDirectory()/updates 对应。 -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

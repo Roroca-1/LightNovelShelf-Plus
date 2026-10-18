@@ -1,9 +1,15 @@
 package app.lightnovel.shelf
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 
 import android.view.KeyEvent
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,10 +22,14 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val READER_VOLUME_KEY_CHANNEL = "app.lightnovel.shelf/reader_volume_keys"
+        const val APP_UPDATE_CHANNEL = "app.lightnovel.shelf/app_update"
+        const val INSTALL_PERMISSION_REQUEST = 4021
     }
 
     private var readerVolumeKeyChannel: MethodChannel? = null
     private var readerVolumeKeyPagingEnabled = false
+    private var appUpdateChannel: MethodChannel? = null
+    private var pendingInstallPermission: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,13 +50,72 @@ class MainActivity : FlutterActivity() {
         // 引擎可能接到新的 Activity 上，此时开关状态刚归零而 Dart 侧仍记着旧值，
         // 要它重发一次，否则阅读器里的音量键会一直不响应。
         channel.invokeMethod("resync", null)
+
+        val updateChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            APP_UPDATE_CHANNEL,
+        )
+        updateChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "supportedAbis" -> result.success(Build.SUPPORTED_ABIS.toList())
+                "requestInstallPermission" -> requestInstallPermission(result)
+                "install" -> {
+                    val path = call.arguments as? String
+                    if (path == null) {
+                        result.error("bad_args", "缺少安装包路径", null)
+                    } else {
+                        installPackage(File(path))
+                        result.success(null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        appUpdateChannel = updateChannel
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         readerVolumeKeyChannel?.setMethodCallHandler(null)
         readerVolumeKeyChannel = null
         readerVolumeKeyPagingEnabled = false
+        appUpdateChannel?.setMethodCallHandler(null)
+        appUpdateChannel = null
+        pendingInstallPermission?.success(false)
+        pendingInstallPermission = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    // Android 8 以前是全局的「未知来源」开关，由系统安装器自己拦截提示。
+    private fun canInstallPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+    private fun requestInstallPermission(result: MethodChannel.Result) {
+        if (canInstallPackages()) {
+            result.success(true)
+            return
+        }
+        pendingInstallPermission?.success(false)
+        pendingInstallPermission = result
+        startActivityForResult(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+            INSTALL_PERMISSION_REQUEST,
+        )
+    }
+
+    // 设置页不回传授权结果，回到前台后重新查询一次。
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != INSTALL_PERMISSION_REQUEST) return
+        pendingInstallPermission?.success(canInstallPackages())
+        pendingInstallPermission = null
+    }
+
+    private fun installPackage(file: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.app_update", file)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
