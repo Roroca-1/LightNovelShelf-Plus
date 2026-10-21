@@ -24,9 +24,8 @@ final Provider<AppUpdater> appUpdaterProvider = Provider<AppUpdater>((ref) {
   );
 });
 
-/// 只有 Android 与 iOS 有发布产物。
-bool get appUpdateSupported =>
-    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+/// Android 下载安装包并安装；iOS 与桌面（Linux/Windows/macOS）跳到 Release 页。
+bool get appUpdateSupported => !kIsWeb;
 
 enum _ReleaseAction { confirm, later, ignore }
 
@@ -66,7 +65,9 @@ class AppUpdater {
       final release = await _fetchNewer();
       if (release == null) return;
       if (await _repository.ignoredVersion() == release.version) return;
-      if (Platform.isIOS) {
+      // iOS/桌面没有应用内安装流程；Android 缺少可校验的安装包（没有 digest、
+      // 没有本机架构）时同样只能打开 Release 页，绝不装来源不明的包。
+      if (!Platform.isAndroid || await _installableAsset(release) == null) {
         await _prompt(release, null, allowIgnore: true);
         return;
       }
@@ -110,10 +111,11 @@ class AppUpdater {
       showAppSnackBar(context, '已是最新版本');
       return;
     }
-    if (Platform.isIOS) {
+    if (!Platform.isAndroid || await _installableAsset(release) == null) {
       await _prompt(release, null, allowIgnore: false);
       return;
     }
+    if (!context.mounted) return;
 
     _manualDownloading = true;
     final download = _startDownload(release);
@@ -143,12 +145,27 @@ class AppUpdater {
 
   Future<AppRelease?> _fetchNewer() async {
     final release = await _repository.fetchLatest();
-    final current = (await PackageInfo.fromPlatform()).version;
+    final current = await _currentVersion();
     if (Platform.isAndroid) {
       await (_cleanup ??= _repository.cleanInstalledApks(current));
     }
     return isNewerVersion(release.version, current) ? release : null;
   }
+
+  /// 已安装版本；`PackageInfo` 在个别平台上读不到时退回构建注入的发布标签。
+  Future<String> _currentVersion() async {
+    var packageVersion = '';
+    try {
+      packageVersion = (await PackageInfo.fromPlatform()).version;
+    } catch (error) {
+      debugPrint('读取应用版本失败：$error');
+    }
+    return resolveCurrentVersion(packageVersion, compiledReleaseTag);
+  }
+
+  /// Android 只有带 sha256 的同架构安装包才会自动下载安装。
+  Future<AppReleaseAsset?> _installableAsset(AppRelease release) async =>
+      release.installableApkFor(await AndroidAppInstaller.supportedAbis());
 
   /// 同一版本只下载一次，自动检查与手动检查共用进行中的下载。
   _ApkDownload _startDownload(AppRelease release) {
@@ -178,11 +195,9 @@ class AppUpdater {
     AppRelease release,
     ValueNotifier<double?> progress,
   ) async {
-    final asset = release.androidApkFor(
-      await AndroidAppInstaller.supportedAbis(),
-    );
+    final asset = await _installableAsset(release);
     if (asset == null) {
-      throw const AppUpdateException('新版本没有适用于本机架构的安装包。');
+      throw const AppUpdateException('新版本没有可校验的安装包，请前往 Release 页下载。');
     }
     return _repository.downloadApk(
       release,

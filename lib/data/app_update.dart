@@ -9,8 +9,14 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/platform/stores.dart';
 
+/// Plus 自己的发布源；「关于」页的 GitHub 链接同样指向这里。
 const String _latestReleaseUrl =
-    'https://api.github.com/repos/LightNovelShelf/Flutter/releases/latest';
+    'https://api.github.com/repos/Roroca-1/LightNovelShelf-Plus/releases/latest';
+
+/// 构建时注入的发布标签（CI 走 `--dart-define=APP_RELEASE_TAG=...`），
+/// 只在 `PackageInfo` 读不到版本时兜底比较。
+const String compiledReleaseTag = String.fromEnvironment('APP_RELEASE_TAG');
+
 const String _ignoredVersionKey = 'app_update_ignored_version';
 const Duration _requestTimeout = Duration(seconds: 15);
 const Duration _downloadStallTimeout = Duration(seconds: 30);
@@ -87,7 +93,7 @@ class AppRelease {
     }
     final notes = value['body'];
     return AppRelease(
-      version: tag.startsWith('v') ? tag.substring(1) : tag,
+      version: normalizeVersionTag(tag),
       notes: notes is String ? notes.trim() : '',
       pageUrl: Uri.parse(page),
       assets: assets,
@@ -95,26 +101,70 @@ class AppRelease {
   }
 
   /// 按设备 ABI 偏好挑安装包；分 ABI 构建的 versionCode 带 ABI 前缀，装错架构会被当成降级。
+  ///
+  /// Plus 的产物名是 `LightNovelShelfPlus-<ARTIFACT_TAG>-arm64-v8a.apk`，这里只按
+  /// `-<abi>.apk` 后缀匹配，桌面端的 AppImage/deb/pkg/Setup/ipa 不会误中。
   AppReleaseAsset? androidApkFor(List<String> abis) {
     for (final abi in abis) {
+      final suffix = '-${abi.toLowerCase()}.apk';
       for (final asset in assets) {
-        if (asset.name == 'app-android-$abi.apk') return asset;
+        if (asset.name.toLowerCase().endsWith(suffix)) return asset;
       }
     }
     return null;
   }
+
+  /// 自动安装要求资产带 sha256：Plus 早期的 Release 没有 `digest` 字段，
+  /// 校验不了就不下载安装，返回 null 让调用方降级成打开 Release 页。
+  AppReleaseAsset? installableApkFor(List<String> abis) {
+    final asset = androidApkFor(abis);
+    return asset == null || asset.sha256 == null ? null : asset;
+  }
+}
+
+/// 归一化 Plus 的发布标签：去掉前导 `v/V`，再截断到第一个 `-`。
+///
+/// `V1.13.2-Plus`、`V1.12.3-Plus.1`、`v1.13.2` 都得到 `主.次.修订`；
+/// 上游只摘小写 v 的写法会留下 `-Plus` 后缀，版本比较随之出错。
+String normalizeVersionTag(String tag) {
+  var value = tag.trim();
+  if (value.startsWith('v') || value.startsWith('V')) {
+    value = value.substring(1);
+  }
+  final dash = value.indexOf('-');
+  if (dash >= 0) value = value.substring(0, dash);
+  return value.trim();
+}
+
+bool _hasDigit(String value) => RegExp(r'\d').hasMatch(value);
+
+/// 当前版本：安装包信息优先（与 pubspec 的 `version:` 一致），
+/// 读不到时退回构建注入的 `APP_RELEASE_TAG`；都没有就当 `0.0.0`。
+String resolveCurrentVersion(String packageVersion, String compiledTag) {
+  final fromPackage = normalizeVersionTag(packageVersion);
+  if (_hasDigit(fromPackage)) return fromPackage;
+  final fromTag = normalizeVersionTag(compiledTag);
+  if (_hasDigit(fromTag)) return fromTag;
+  return '0.0.0';
+}
+
+/// 关于页展示的版本串，保留 Plus 标识：`1.13.2-Plus (26)`。
+String plusVersionLabel(String version, String buildNumber) {
+  final base = normalizeVersionTag(version);
+  if (!_hasDigit(base)) return '版本未知';
+  final build = buildNumber.trim();
+  return build.isEmpty ? '$base-Plus' : '$base-Plus ($build)';
 }
 
 /// 只比较 `主.次.修订` 的数字段，忽略 `+构建号` 与预发布后缀。
 bool isNewerVersion(String candidate, String current) {
-  List<int> parse(String version) => version
-      .split('+')
-      .first
-      .split('-')
-      .first
-      .split('.')
-      .map((part) => int.tryParse(part) ?? 0)
-      .toList();
+  List<int> parse(String version) =>
+      normalizeVersionTag(version)
+          .split('+')
+          .first
+          .split('.')
+          .map((part) => int.tryParse(part.trim()) ?? 0)
+          .toList();
   final a = parse(candidate);
   final b = parse(current);
   for (var i = 0; i < math.max(a.length, b.length); i++) {

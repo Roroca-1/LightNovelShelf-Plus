@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/app_update.dart';
 import '../../data/providers.dart';
 import '../../shared/widgets/app_dialogs.dart';
 import '../../shared/widgets/settings_rows.dart';
@@ -11,8 +12,7 @@ import '../update/app_updater.dart';
 const String officialWebsiteUrl = 'https://www.lightnovel.app';
 const String officialGroupUrl = 'https://t.me/+J5xdTWVGOJMyOWRl';
 const String sponsorUrl = 'https://www.ifdian.net/a/wuyu8512';
-const String githubUrl =
-    'https://github.com/Roroca-1/LightNovelShelf-Plus';
+const String githubUrl = 'https://github.com/Roroca-1/LightNovelShelf-Plus';
 
 class AboutSettingsScreen extends ConsumerStatefulWidget {
   const AboutSettingsScreen({super.key});
@@ -33,15 +33,17 @@ class _AboutSettingsScreenState extends ConsumerState<AboutSettingsScreen> {
   }
 
   Future<void> _loadVersion() async {
-    final info = await PackageInfo.fromPlatform();
+    String version = '';
+    String build = '';
+    try {
+      final info = await PackageInfo.fromPlatform();
+      version = info.version;
+      build = info.buildNumber;
+    } catch (_) {
+      // 取不到安装包信息时退回构建注入的发布标签。
+    }
     if (!mounted) return;
-    final version = info.version.trim();
-    final build = info.buildNumber.trim();
-    setState(() {
-      _version = version.isEmpty
-          ? '版本未知'
-          : (build.isEmpty ? version : '$version ($build)');
-    });
+    setState(() => _version = plusVersionLabel(version, build));
   }
 
   Future<void> _checkUpdate() async {

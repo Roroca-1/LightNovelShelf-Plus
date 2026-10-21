@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # CI 构建同样注入发布标识，用来验证 APP_RELEASE_TAG 通路。
+      APP_RELEASE_TAG: ci-${{ github.run_number }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -58,11 +60,20 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: 构建 Android Debug 安装包
-        run: flutter build apk --debug
+        run: flutter build apk --debug --dart-define=APP_RELEASE_TAG=$APP_RELEASE_TAG
+
+      - name: Verify Plus application ID
+        run: |
+          apk="build/app/outputs/flutter-apk/app-debug.apk"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n1)"
+          test -x "$aapt"
+          package_name="$($aapt dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          echo "APK application ID: $package_name"
+          test "$package_name" = "app.lightnovel.shelf.plus"
 
       - uses: actions/upload-artifact@v5
         with:
-          name: lightnovel-shelf-android-debug
+          name: lightnovel-shelf-plus-android-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
 
@@ -88,7 +99,7 @@ jobs:
           restore-keys: pods-${{ runner.os }}-
 
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --release --no-codesign --dart-define=APP_RELEASE_TAG=ci-${{ github.run_number }}
 
       - name: 打包 IPA
         run: |
@@ -100,6 +111,6 @@ jobs:
 
       - uses: actions/upload-artifact@v5
         with:
-          name: lightnovel-shelf-ios-unsigned
+          name: lightnovel-shelf-plus-ios-unsigned
           path: dist/app-ios-unsigned.ipa
           retention-days: 7

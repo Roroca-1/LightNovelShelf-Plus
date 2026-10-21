@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/platform/desktop_platform.dart';
-import '../data/repositories/app_update_repository.dart';
 import '../data/repositories/profile_repository.dart';
 import '../data/repositories/unread_counts.dart';
 import '../shared/layout/adaptive_layout.dart';
@@ -36,11 +34,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
     WidgetsBinding.instance.addObserver(this);
     autoCheckInResult.addListener(_showCheckInResult);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showCheckInResult());
-    // 移动端启动检查交给 features/update/app_updater.dart；
-    // 桌面端没有安装包下载/安装流程，仍走 Plus 的发布页入口。
-    if (isDesktopPlatform) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
-    }
+    // 启动检查统一由 features/update/app_updater.dart 发起（Android 安装、
+    // iOS/桌面打开 Release 页），这里不再单独请求发布源。
   }
 
   @override
@@ -48,45 +43,6 @@ class _HomeShellState extends ConsumerState<HomeShell>
     if (state == AppLifecycleState.resumed) {
       unawaited(ref.read(communityUnreadCountProvider.notifier).reconcile());
     }
-  }
-
-  Future<void> _checkForUpdate() async {
-    AppUpdate? update;
-    try {
-      update = await const AppUpdateRepository().check();
-    } catch (_) {
-      return;
-    }
-    if (!mounted || update == null) return;
-    final found = update;
-    final target = found.downloadUrl ?? found.releaseUrl;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.system_update_outlined),
-        title: Text('发现新版本 ${found.tag}'),
-        content: const Text(
-          '可以下载适合当前平台的安装包。安装前会由系统再次确认。\n'
-          '下载前请先阅读更新日志，确认更新内容。',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('稍后'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              await launchUrl(
-                Uri.parse(target),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-            child: const Text('下载更新'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -158,9 +114,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
                   ),
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(
-                  child: PaneMediaQuery(removeLeft: true, child: body),
-                ),
+                Expanded(child: PaneMediaQuery(removeLeft: true, child: body)),
               ],
             ),
           )
@@ -184,13 +138,17 @@ class _HomeShellState extends ConsumerState<HomeShell>
     return CallbackShortcuts(
       bindings: isDesktopPlatform
           ? <ShortcutActivator, VoidCallback>{
-              const SingleActivator(LogicalKeyboardKey.tab, control: true):
-                  () => _switchBranch(1),
+              const SingleActivator(
+                LogicalKeyboardKey.tab,
+                control: true,
+              ): () =>
+                  _switchBranch(1),
               const SingleActivator(
                 LogicalKeyboardKey.tab,
                 control: true,
                 shift: true,
-              ): () => _switchBranch(-1),
+              ): () =>
+                  _switchBranch(-1),
             }
           : const <ShortcutActivator, VoidCallback>{},
       child: Focus(autofocus: true, child: content),
