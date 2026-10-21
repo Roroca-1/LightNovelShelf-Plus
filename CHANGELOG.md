@@ -28,17 +28,19 @@
 - 书架排序为纯显示排序（手动顺序 / 标题 / 最近更新 / 最近加入），中文优先按拼音、检测到假名时用罗马字，不改动服务端顺序。
 - 桌面端宽屏布局、右键快捷菜单（直接阅读、搜索系列、加入 / 移出书架、多选）与键盘焦点浏览。
 - 自定义 Material 3 主题色、系统动态配色、OLED 纯黑模式，以及可分别设置的应用背景与阅读背景（含亮度、模糊、Material You 取色）。
-- 缓存优先的首屏策略、封面与漫画预加载优化，以及设置页的清除全部 / 图片 / 字体缓存入口。
+- 短 TTL（15 分钟）缓存直读：命中缓存立即渲染，过期后再拉取；配合封面与漫画预加载优化，以及设置页的清除全部 / 图片 / 字体缓存入口。
 - 自动签到，以及设置页的「检查更新」入口、`autoCheckUpdate` 开关与忽略版本持久化（`app_update_ignored_version`）。
 - 应用标识保持 `app.lightnovel.shelf.plus`，可与官方版轻书架同时安装。
+
 ### 三、冲突裁决与实现选择
 
 - **更新器只留一套引擎**：采用上游的 `lib/data/app_update.dart` + `lib/features/update/app_updater.dart` + `lib/core/platform/android_app_installer.dart`，删除 Plus 旧的 `lib/data/repositories/app_update_repository.dart`。原因：上游实现自带 sha256 校验与平台安装器，能力比 Plus 的「跳发布页」更完整，两套并存会出现启动时弹两个框。
 - **发布源与资产匹配改成 Plus**：`_latestReleaseUrl` 指向 `Roroca-1/LightNovelShelf-Plus/releases/latest`；资产匹配由上游的 `app-android-<abi>.apk` 改为后缀匹配，命中 Plus 历史产物名 `LightNovelShelfPlus-<ARTIFACT_TAG>-arm64-v8a.apk`。原因：产物命名是 Plus 已有的发布习惯，改命名会孤立历史版本。
-- **版本号归一化**：新版本标签形如 `V1.13.2-Plus`、`V1.12.3-Plus.1`，上游只摘小写 `v`，会把大写 `V` 和 `-Plus` 后缀带进版本比较。现统一为「去前导 v/V → 截断到第一个 `-` → 数字逐段比较」，当前版本取 `PackageInfo`，缺失时回退编译期注入的 `APP_RELEASE_TAG`。
+- **版本号归一化**：新版本标签形如 `V1.13.2-Plus`、`V1.12.3-Plus.1`，上游只摘小写 `v`，会把大写 `V` 和 `-Plus` 后缀带进版本比较。现统一为「去前导 v/V → 截断到第一个 `-` 得到 `主.次.修订` → 逐段比较数字」，并把 `-Plus` 后紧跟的重发序号当作第四段数字参与比较：`V1.13.2-Plus` = `[1,13,2,0]`、`V1.13.2-Plus.1` = `[1,13,2,1]`、裸 `1.13.2` = `[1,13,2,0]`，`+构建号`（如 `+26`）仍不参与比较。忽略记录保存的是带序号的版本身份（如 `1.13.2-Plus.1`），所以「忽略 `1.13.2`」不会连带吞掉它的重发包。当前版本取 `PackageInfo`，缺失时回退编译期注入的 `APP_RELEASE_TAG`。
 - **没有摘要就降级**：上游只有在资产带 `digest`（sha256）时才自动安装。Plus 的历史 Release 资产可能没有该字段，此时不报错、不装错包，直接打开 Release 页让用户手动下载。
 - **平台并集不退化**：Android 走「下载 → 校验 → 安装」，iOS 打开 Release 页，桌面（Linux / Windows / macOS）也打开 Release 页；启动检查只执行一次、只弹一个对话框，网络失败（403、限流、超时、无网）静默处理，只在调试日志留痕。
 - **关于页版本串保留 Plus 标识**：由 `pubspec.yaml` 的 `version: 1.13.2+26` 生成 `1.13.2-Plus (26)`，不采用上游的裸版本号，便于用户区分官方版与 Plus。
+- **Kotlin 包名对齐 Gradle namespace**：`android/app/src/main/kotlin/.../AppUpdateFileProvider.kt` 原先声明 `package app.lightnovel.shelf`，而 `namespace` / `applicationId` 都是 `app.lightnovel.shelf.plus`；`AndroidManifest.xml` 里的相对类名 `.AppUpdateFileProvider` 会按 namespace 解析到不存在的类，ContentProvider 又在 `Application.onCreate` 之前实例化，导致 Android 每次启动必崩。现已移入 `.../shelf/plus/` 并把包声明改为 `app.lightnovel.shelf.plus`，同时由 `ci.yml` 断言每个 Kotlin 文件的包名必须等于 `build.gradle.kts` 的 namespace。原因是这类跨语言接线错误编译期发现不了，只能靠 CI 兜住。
 - **Release 正文改用手写日志**：上游用 `generate_release_notes` 自动生成，Plus 改从本文件抽取对应版本段落，避免自动说明与手写日志重复；`fail_on_unmatched_files` 保留，产物缺失仍然让发布失败。
 
 ### 四、构建与发布
@@ -54,6 +56,7 @@
 ### 五、升级注意事项与已知问题
 
 - 从旧版 Plus（如 `V1.12.3-Plus`）升级：启动检查会把 Plus 仓库最新的 Release 与当前版本比较，`V`/`v` 大小写与 `-Plus`、`-Plus.1` 后缀都能正确归一化，不会出现「已是最新却反复提示」或「漏掉新版本」。
+- 同一上游版本的重发包（如 `V1.13.2-Plus.1`）会正常提示更新：重发序号参与版本比较，忽略记录也按带序号的版本身份区分，不会因「已忽略 `1.13.2`」而永久静默。
 - Android 自动安装依赖 Release 资产带 `digest` 字段。若最新 Release 的 APK 没有该字段，应用会打开 Release 页提示手动下载，这是预期降级，不是故障。
 - 桌面端不再单独发起发布页检查，统一由 App 内更新器负责；桌面只提供「检查更新 → 打开 Release 页」，下载安装仍需手动完成（AppImage / deb / pkg.tar.zst / 安装程序）。
 - iOS 只发布无签名产物，装到真机需要使用者自行签名。

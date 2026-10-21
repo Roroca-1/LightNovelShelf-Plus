@@ -26,6 +26,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Kotlin 包名与 Gradle namespace 不一致时，Manifest 里的相对类名
+      # （.AppUpdateFileProvider）会解析到不存在的类，进程启动即崩，且编译期发现不了。
+      - name: Verify Kotlin package matches namespace
+        run: |
+          namespace="$(sed -nE 's/^[[:space:]]*namespace[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' android/app/build.gradle.kts | head -n1)"
+          if [ -z "$namespace" ]; then
+            echo "::error::无法从 android/app/build.gradle.kts 读取 namespace"
+            exit 1
+          fi
+          echo "Gradle namespace: $namespace"
+          status=0
+          while IFS= read -r file; do
+            package_name="$(sed -nE 's/^package[[:space:]]+([^[:space:]]+).*/\1/p' "$file" | head -n1 | tr -d '\r')"
+            if [ "$package_name" != "$namespace" ]; then
+              echo "::error file=$file::Kotlin 包名 $package_name 与 Gradle namespace $namespace 不一致"
+              status=1
+            fi
+          done < <(find android/app/src/main/kotlin -name '*.kt' | sort)
+          exit $status
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

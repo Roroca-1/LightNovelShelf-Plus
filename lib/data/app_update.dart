@@ -69,6 +69,10 @@ class AppRelease {
     if (tag is! String || tag.isEmpty || page is! String) {
       throw const AppUpdateException('版本信息格式错误。');
     }
+    final pageUrl = Uri.tryParse(page);
+    if (pageUrl == null) {
+      throw const AppUpdateException('版本信息格式错误。');
+    }
     final assets = <AppReleaseAsset>[];
     final rawAssets = value['assets'];
     if (rawAssets is List) {
@@ -78,11 +82,13 @@ class AppRelease {
         final url = asset['browser_download_url'];
         final size = asset['size'];
         if (name is! String || url is! String || size is! int) continue;
+        final parsedUrl = Uri.tryParse(url);
+        if (parsedUrl == null) continue;
         final digest = asset['digest'];
         assets.add(
           AppReleaseAsset(
             name: name,
-            url: Uri.parse(url),
+            url: parsedUrl,
             size: size,
             sha256: digest is String && digest.startsWith('sha256:')
                 ? digest.substring('sha256:'.length).toLowerCase()
@@ -93,9 +99,9 @@ class AppRelease {
     }
     final notes = value['body'];
     return AppRelease(
-      version: normalizeVersionTag(tag),
+      version: releaseVersion(tag),
       notes: notes is String ? notes.trim() : '',
-      pageUrl: Uri.parse(page),
+      pageUrl: pageUrl,
       assets: assets,
     );
   }
@@ -138,6 +144,27 @@ String normalizeVersionTag(String tag) {
 
 bool _hasDigit(String value) => RegExp(r'\d').hasMatch(value);
 
+/// `-Plus` 后面紧跟的重发序号：`V1.13.2-Plus.1` → 1，`V1.13.2-Plus` → 0。
+///
+/// 同一个上游版本在 Plus 侧重发补丁时只改这个序号，所以它必须参与比较，
+/// 否则 `V1.13.2-Plus.1` 会被当成与 `1.13.2` 相等而永远不提示更新。
+int plusRevision(String tag) =>
+    int.tryParse(
+      RegExp(r'[-+]plus\.(\d+)', caseSensitive: false).firstMatch(tag)?.group(1) ??
+          '',
+    ) ??
+    0;
+
+/// 版本身份：同一上游版本在 Plus 侧重发时靠 `-Plus.N` 区分。
+///
+/// 只用于忽略记录与下载文件名，保证「忽略 `1.13.2` 之后 `1.13.2-Plus.1` 仍会提示」；
+/// 展示与比较仍走 [normalizeVersionTag]。
+String releaseVersion(String tag) {
+  final base = normalizeVersionTag(tag);
+  final revision = plusRevision(tag);
+  return revision == 0 ? base : '$base-Plus.$revision';
+}
+
 /// 当前版本：安装包信息优先（与 pubspec 的 `version:` 一致），
 /// 读不到时退回构建注入的 `APP_RELEASE_TAG`；都没有就当 `0.0.0`。
 String resolveCurrentVersion(String packageVersion, String compiledTag) {
@@ -156,15 +183,20 @@ String plusVersionLabel(String version, String buildNumber) {
   return build.isEmpty ? '$base-Plus' : '$base-Plus ($build)';
 }
 
-/// 只比较 `主.次.修订` 的数字段，忽略 `+构建号` 与预发布后缀。
+/// 逐段比较数字：`主.次.修订` + `-Plus.N` 重发序号，忽略 `+构建号`。
+///
+/// `V1.13.2-Plus` 与 `1.13.2` 判等（序号 0），`V1.13.2-Plus.1` 比它们新。
 bool isNewerVersion(String candidate, String current) {
-  List<int> parse(String version) =>
-      normalizeVersionTag(version)
-          .split('+')
-          .first
-          .split('.')
-          .map((part) => int.tryParse(part.trim()) ?? 0)
-          .toList();
+  List<int> parse(String version) {
+    final segments = normalizeVersionTag(version)
+        .split('+')
+        .first
+        .split('.')
+        .map((part) => int.tryParse(part.trim()) ?? 0)
+        .toList();
+    segments.add(plusRevision(version));
+    return segments;
+  }
   final a = parse(candidate);
   final b = parse(current);
   for (var i = 0; i < math.max(a.length, b.length); i++) {
@@ -187,12 +219,23 @@ class _DigestSink implements Sink<Digest> {
 
 /// 从 GitHub Release 获取新版本并下载 Android 安装包。
 class AppUpdateRepository {
-  AppUpdateRepository({required KeyValueStore store, http.Client? client})
-    : _store = store,
-      _client = client ?? http.Client();
+  AppUpdateRepository({
+    required KeyValueStore store,
+    http.Client? client,
+    Directory? updatesDirectory,
+  }) : _store = store,
+       _client = client ?? http.Client(),
+       _overrideDirectory = updatesDirectory;
 
   final KeyValueStore _store;
   final http.Client _client;
+
+  /// 测试注入的目录；正式运行时用系统临时目录下的 `updates/`。
+  final Directory? _overrideDirectory;
+
+  Future<Directory> _updates() async =>
+      _overrideDirectory ??
+      Directory('${(await getTemporaryDirectory()).path}/updates');
 
   Future<AppRelease> fetchLatest() async {
     final http.Response response;
@@ -213,7 +256,13 @@ class AppUpdateRepository {
     if (response.statusCode != HttpStatus.ok) {
       throw AppUpdateException('获取版本信息失败（HTTP ${response.statusCode}）。');
     }
-    return AppRelease.decode(jsonDecode(utf8.decode(response.bodyBytes)));
+    final Object? payload;
+    try {
+      payload = jsonDecode(utf8.decode(response.bodyBytes));
+    } on Exception {
+      throw const AppUpdateException('版本信息格式错误。');
+    }
+    return AppRelease.decode(payload);
   }
 
   Future<String?> ignoredVersion() => _store.read(_ignoredVersionKey);
@@ -221,17 +270,25 @@ class AppUpdateRepository {
   Future<void> ignoreVersion(String version) =>
       _store.write(_ignoredVersionKey, version);
 
-  /// 只清理已安装版本及更早的包，保留其它更新弹窗仍可能使用的文件。
+  /// 只保留当前版本对应的下载文件，其余 `.apk` / `.part` 全部清掉。
+  ///
+  /// 下载文件名为 `<version>-<asset.name>`，按版本前缀判断即可；目录不存在时直接返回，
+  /// 重复调用保持幂等（已删掉的文件不会再次报错）。
   Future<void> cleanInstalledApks(String currentVersion) async {
-    final directory = Directory(
-      '${(await getTemporaryDirectory()).path}/updates',
-    );
+    final directory = await _updates();
     if (!await directory.exists()) return;
-    final namePattern = RegExp(r'^([0-9]+(?:\.[0-9]+)*)-app-android-');
+    final keep = normalizeVersionTag(currentVersion);
     await for (final entity in directory.list()) {
-      final match = namePattern.firstMatch(entity.uri.pathSegments.last);
-      if (match != null && !isNewerVersion(match.group(1)!, currentVersion)) {
-        await entity.delete(recursive: true);
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (!name.endsWith('.apk') && !name.endsWith('.part')) continue;
+      if (keep.isNotEmpty && (name == keep || name.startsWith('$keep-'))) {
+        continue;
+      }
+      try {
+        await entity.delete();
+      } on FileSystemException {
+        // 别的流程已经删掉时保持幂等。
       }
     }
   }
@@ -242,9 +299,7 @@ class AppUpdateRepository {
     AppReleaseAsset asset, {
     void Function(int received, int total)? onProgress,
   }) async {
-    final directory = Directory(
-      '${(await getTemporaryDirectory()).path}/updates',
-    );
+    final directory = await _updates();
     await directory.create(recursive: true);
     final target = File('${directory.path}/${release.version}-${asset.name}');
     if (await target.exists() &&
@@ -285,19 +340,35 @@ class AppUpdateRepository {
         received += chunk.length;
         onProgress?.call(received, total);
       }
+      await sink.close();
     } on TimeoutException {
+      await _discard(part, sink);
       throw const AppUpdateException('下载安装包超时。');
     } on Exception {
+      await _discard(part, sink);
       throw const AppUpdateException('下载安装包中断。');
-    } finally {
-      await sink.close();
     }
     hasher.close();
-    if (!_matches(received, digest.value!, asset)) {
-      await part.delete();
+    final checksum = digest.value;
+    if (checksum == null || !_matches(received, checksum, asset)) {
+      await _discard(part, sink);
       throw const AppUpdateException('安装包校验失败。');
     }
     return part.rename(target.path);
+  }
+
+  /// 关掉写入句柄后再删临时文件，避免半成品 `.part` 堆积（Windows 上开着句柄删不掉）。
+  static Future<void> _discard(File part, IOSink sink) async {
+    try {
+      await sink.close();
+    } on Exception {
+      // 已经关闭过时忽略。
+    }
+    try {
+      if (await part.exists()) await part.delete();
+    } on FileSystemException {
+      // 删不掉也不影响上层已经确定的异常。
+    }
   }
 
   static bool _matches(int length, Digest digest, AppReleaseAsset asset) =>

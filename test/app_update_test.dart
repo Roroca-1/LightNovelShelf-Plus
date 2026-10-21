@@ -1,5 +1,29 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:lightnovel_shelf_plus/core/platform/stores.dart';
 import 'package:lightnovel_shelf_plus/data/app_update.dart';
+
+class _FakeStore implements KeyValueStore {
+  final Map<String, String> values = <String, String>{};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+}
 
 const String _digest =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -35,11 +59,38 @@ void main() {
     });
   });
 
+  group('plusRevision', () {
+    test('读出 -Plus 后的重发序号', () {
+      expect(plusRevision('V1.13.2-Plus'), 0);
+      expect(plusRevision('V1.13.2-Plus.1'), 1);
+      expect(plusRevision('v1.12.3-plus.12'), 12);
+      expect(plusRevision('v1.13.2'), 0);
+      expect(plusRevision('1.13.2-PlusX'), 0);
+    });
+  });
+
+  group('releaseVersion', () {
+    test('重发包保留序号作为身份，首发仍是基础版本', () {
+      expect(releaseVersion('V1.13.2-Plus'), '1.13.2');
+      expect(releaseVersion('V1.13.2-Plus.1'), '1.13.2-Plus.1');
+      expect(releaseVersion('v1.12.3'), '1.12.3');
+    });
+  });
+
   group('isNewerVersion', () {
     test('Plus 标签与纯版本号相等时不提示更新', () {
       expect(isNewerVersion('V1.13.2-Plus', '1.13.2'), isFalse);
-      expect(isNewerVersion('V1.12.3-Plus.1', '1.12.3'), isFalse);
       expect(isNewerVersion('V1.13.2-Plus', 'V1.13.2-Plus'), isFalse);
+      expect(isNewerVersion('1.13.2', 'V1.13.2-Plus'), isFalse);
+    });
+
+    test('同一上游版本的重发包 -Plus.N 提示更新', () {
+      expect(isNewerVersion('V1.13.2-Plus.1', '1.13.2'), isTrue);
+      expect(isNewerVersion('V1.12.3-Plus.1', '1.12.3'), isTrue);
+      expect(isNewerVersion('V1.13.2-Plus.1', 'V1.13.2-Plus'), isTrue);
+      expect(isNewerVersion('V1.13.2-Plus.2', 'V1.13.2-Plus.1'), isTrue);
+      expect(isNewerVersion('V1.13.2-Plus', 'V1.13.2-Plus.1'), isFalse);
+      expect(isNewerVersion('V1.13.2-Plus.1', 'V1.13.2-Plus.1'), isFalse);
     });
 
     test('更高版本提示更新，更旧版本不提示', () {
@@ -194,6 +245,15 @@ void main() {
       expect(release.installableApkFor(<String>['arm64-v8a']), isNull);
     });
 
+    test('重发包的版本身份带上 -Plus.N', () {
+      final release = AppRelease.decode(<String, Object?>{
+        'tag_name': 'V1.13.2-Plus.1',
+        'html_url': 'https://example.com/release',
+      });
+      expect(release.version, '1.13.2-Plus.1');
+      expect(release.assets, isEmpty);
+    });
+
     test('缺少 tag 或页面链接时抛异常', () {
       expect(
         () => AppRelease.decode(<String, Object?>{
@@ -205,6 +265,169 @@ void main() {
         () => AppRelease.decode('not-a-map'),
         throwsA(isA<AppUpdateException>()),
       );
+    });
+  });
+
+  group('AppUpdateRepository', () {
+    late Directory directory;
+    late _FakeStore store;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('app_update_test');
+      store = _FakeStore();
+    });
+
+    tearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+
+    AppUpdateRepository build(http.Client client) =>
+        AppUpdateRepository(
+          store: store,
+          client: client,
+          updatesDirectory: directory,
+        );
+
+    test('限流或拒绝访问时抛 AppUpdateException', () async {
+      for (final status in <int>[403, 429]) {
+        final repository = build(
+          MockClient((request) async => http.Response('rate limited', status)),
+        );
+        await expectLater(
+          repository.fetchLatest(),
+          throwsA(isA<AppUpdateException>()),
+        );
+      }
+    });
+
+    test('非 200 与畸形 JSON 都抛 AppUpdateException', () async {
+      final bodies = <String>[
+        'boom',
+        '{"tag_name":',
+        '[]',
+        '{"html_url":"https://example.com"}',
+      ];
+      final statuses = <int>[500, 200, 200, 200];
+      for (var i = 0; i < bodies.length; i++) {
+        final repository = build(
+          MockClient((request) async => http.Response(bodies[i], statuses[i])),
+        );
+        await expectLater(
+          repository.fetchLatest(),
+          throwsA(isA<AppUpdateException>()),
+        );
+      }
+    });
+
+    test('合法响应解析出 Plus 版本与资产', () async {
+      final repository = build(
+        MockClient(
+          (request) async => http.Response(
+            jsonEncode(<String, Object?>{
+              'tag_name': 'V1.13.2-Plus',
+              'html_url': 'https://example.com/release',
+              'assets': <Object?>[
+                <String, Object?>{
+                  'name': 'LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+                  'browser_download_url': 'https://example.com/app.apk',
+                  'size': 2048,
+                },
+              ],
+            }),
+            200,
+          ),
+        ),
+      );
+      final release = await repository.fetchLatest();
+      expect(release.version, '1.13.2');
+      expect(release.androidApkFor(<String>['arm64-v8a']), isNotNull);
+      expect(release.installableApkFor(<String>['arm64-v8a']), isNull);
+    });
+
+    test('digest 不匹配时抛异常并删掉 .part', () async {
+      const body = 'apk-bytes';
+      final asset = AppReleaseAsset(
+        name: 'LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+        url: Uri.parse('https://example.com/app.apk'),
+        size: utf8.encode(body).length,
+        sha256: List<String>.filled(64, 'b').join(),
+      );
+      final repository = build(
+        MockClient((request) async => http.Response(body, 200)),
+      );
+      await expectLater(
+        repository.downloadApk(_release(<AppReleaseAsset>[asset]), asset),
+        throwsA(isA<AppUpdateException>()),
+      );
+      expect(
+        await directory.list().map((e) => e.uri.pathSegments.last).toList(),
+        isEmpty,
+      );
+    });
+
+    test('下载成功后校验通过并复用已下载的包', () async {
+      const body = 'apk-bytes';
+      final asset = AppReleaseAsset(
+        name: 'LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+        url: Uri.parse('https://example.com/app.apk'),
+        size: utf8.encode(body).length,
+        sha256: sha256.convert(utf8.encode(body)).toString(),
+      );
+      var requests = 0;
+      final repository = build(
+        MockClient((request) async {
+          requests++;
+          return http.Response(body, 200);
+        }),
+      );
+      final release = _release(<AppReleaseAsset>[asset]);
+      final file = await repository.downloadApk(release, asset);
+      expect(await file.readAsString(), body);
+      expect(file.path.endsWith('.apk'), isTrue);
+      expect(await File('${file.path}.part').exists(), isFalse);
+      final again = await repository.downloadApk(release, asset);
+      expect(again.path, file.path);
+      expect(requests, 1);
+    });
+
+    test('只删旧版本下载文件，保留当前版本并保持幂等', () async {
+      final files = <File>[
+        File(
+          '${directory.path}/1.12.0-LightNovelShelfPlus-V1.12.0-Plus-arm64-v8a.apk',
+        ),
+        File(
+          '${directory.path}/1.12.0-LightNovelShelfPlus-V1.12.0-Plus-arm64-v8a.apk.part',
+        ),
+        File(
+          '${directory.path}/1.13.2-LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+        ),
+        File('${directory.path}/notes.txt'),
+      ];
+      for (final file in files) {
+        await file.writeAsString('x');
+      }
+      final repository = build(
+        MockClient((request) async => http.Response('', 200)),
+      );
+      await repository.cleanInstalledApks('1.13.2');
+      final names =
+          await directory.list().map((e) => e.uri.pathSegments.last).toList();
+      expect(names..sort(), <String>[
+        '1.13.2-LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+        'notes.txt',
+      ]);
+      await repository.cleanInstalledApks('1.13.2');
+      expect(await directory.list().length, 2);
+    });
+
+    test('更新目录不存在时直接返回', () async {
+      final missing = Directory('${directory.path}/missing');
+      final repository = AppUpdateRepository(
+        store: store,
+        updatesDirectory: missing,
+      );
+      await repository.cleanInstalledApks('1.13.2');
+      expect(await missing.exists(), isFalse);
     });
   });
 }

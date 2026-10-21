@@ -1,4 +1,4 @@
-package app.lightnovel.shelf
+package app.lightnovel.shelf.plus
 
 import androidx.core.content.FileProvider
 
