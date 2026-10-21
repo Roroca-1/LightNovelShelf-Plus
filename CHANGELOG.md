@@ -52,6 +52,8 @@
 - **签名与校验**：Android 要求仓库持久签名密钥存在，否则直接失败（不再退回调试签名）；构建后用 `aapt` 校验包名必须为 `app.lightnovel.shelf.plus`，iOS 用 `PlistBuddy` 校验 `CFBundleIdentifier` 一致。
 - **发布正文**：publish 作业检出 tag、从 `CHANGELOG.md` 抽取 `## <RELEASE_TAG>` 段落写入临时 `RELEASE_NOTES.md`，作为 `body_path` 发布；段落缺失则直接失败，防止发出空说明。
 - **缓存的取舍**：采纳上游 `gradle/actions/setup-gradle` 的 `cache-provider: basic` 与 `pub-cache`，标签构建只读缓存、不污染 main 的缓存内容。
+- **Linux 构建不再要求 WPE WebKit**：上游的人机验证把 `flutter_inappwebview` 锁到带 Linux 实现的 beta 版，而该实现编译期要求 `libwpewebkit-*`，这个包在 Ubuntu 官方源（含 24.04 runner）里并不存在，首次发布流水线的 linux 作业因此报 `WPE WebKit not found` 失败。由于 Plus 的 Linux 桌面本来就声明不支持人机验证（`AuthTurnstile.isSupported` 不含 Linux），现用 `third_party/flutter_inappwebview_linux` 这个空实现占位插件替换 Linux 端实现：不编译 WPE、不注册任何 WebView，其余平台实现与行为完全不变。
+- **Windows 构建兼容 VS 2026**：`flutter_inappwebview_windows` 使用 C++/WinRT 实验性协程，MSVC 14.51 把 `STL1011` 弃用提示升级成了硬错误。已在 `windows/CMakeLists.txt` 里加 `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)` 抑制该断言，Windows 产物与运行时行为不变。
 
 ### 五、升级注意事项与已知问题
 

@@ -63,6 +63,11 @@ dependencies:
 dependency_overrides:
   # 6.1.5 的 Android 插件仍用 proguard-android.txt，AGP 9 直接拒绝构建；beta 改用了 optimize 版本。
   flutter_inappwebview: 6.2.0-beta.3
+  # Linux 桌面不使用 WebView（见 lib/features/auth/widgets/auth_turnstile.dart），
+  # 而上游 flutter_inappwebview_linux 需要编译 WPE WebKit，GitHub Runner 没有该开发包。
+  # 这里用空实现占位包替换，只影响 Linux 插件构建，其余平台实现不变。
+  flutter_inappwebview_linux:
+    path: third_party/flutter_inappwebview_linux
 
 dev_dependencies:
   flutter_test:

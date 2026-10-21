@@ -1,0 +1,17 @@
+name: flutter_inappwebview_linux
+description: 空实现占位插件：轻书架Plus 的 Linux 桌面不使用 WebView，用它替换上游需要编译 WPE WebKit 的 Linux 实现。
+publish_to: none
+version: 0.1.0-beta.1
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.32.0"
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    implements: flutter_inappwebview
+    platforms:
+      linux:
+        pluginClass: FlutterInappwebviewLinuxPlugin
