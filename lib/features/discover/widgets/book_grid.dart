@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../app/list_detail.dart';
 import '../../../data/api/models.dart';
 import '../../../shared/layout/book_grid_layout.dart';
 import '../../../shared/widgets/book_cover_grid_item.dart';
@@ -13,7 +13,7 @@ void openBookDetail(
   BookListItem book, {
   String? fromSeries,
 }) {
-  context.push(
+  context.openPage(
     Uri(
       path: '/book/${book.id}',
       queryParameters: <String, String>{

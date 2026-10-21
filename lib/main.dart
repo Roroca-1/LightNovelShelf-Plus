@@ -18,6 +18,7 @@ import 'data/providers.dart';
 import 'data/retry_policy.dart';
 import 'data/session/auth_controller.dart';
 import 'data/settings/app_settings.dart';
+import 'features/update/app_updater.dart';
 import 'shared/widgets/background_image_layer.dart';
 
 /// 开发期通过 `--dart-define=REFRESH_TOKEN=...` 注入的刷新令牌，用于跳过手动登录。
@@ -141,11 +142,25 @@ class _StartupScreen extends StatelessWidget {
   );
 }
 
-class LightNovelShelfApp extends ConsumerWidget {
+class LightNovelShelfApp extends ConsumerStatefulWidget {
   const LightNovelShelfApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LightNovelShelfApp> createState() => _LightNovelShelfAppState();
+}
+
+class _LightNovelShelfAppState extends ConsumerState<LightNovelShelfApp> {
+  @override
+  void initState() {
+    super.initState();
+    // 更新提示挂在根导航上，要等首帧把 Navigator 建好。
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(ref.read(appUpdaterProvider).checkOnLaunch()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // 根节点只订阅主题与语言相关字段，字号、阅读器排版之类的写入不再重建
     // MaterialApp.router → Router → Navigator。
     final palette = ref.watch(appSettingsProvider.select(AppPalette.of));

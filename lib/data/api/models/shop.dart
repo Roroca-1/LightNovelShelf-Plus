@@ -1,7 +1,7 @@
 import '../decode.dart';
 
 const String signMakeupItemKey = 'sign_makeup';
-const String comicQuotaItemKey = 'comic_quota_50';
+const String renameCardItemKey = 'rename_card';
 
 class ShopItem {
   const ShopItem({
@@ -71,6 +71,7 @@ class OwnedShopItem {
     required this.imageUrl,
     required this.imagePlaceholder,
     required this.quantity,
+    required this.usable,
   });
 
   final String key;
@@ -79,6 +80,7 @@ class OwnedShopItem {
   final String imageUrl;
   final String? imagePlaceholder;
   final int quantity;
+  final bool usable;
 
   static OwnedShopItem decode(Object? value) {
     final record = asRecord(value, '持有道具');
@@ -90,6 +92,7 @@ class OwnedShopItem {
       imageUrl: image.url,
       imagePlaceholder: image.placeholder,
       quantity: asCount(record['Quantity']),
+      usable: asBool(record['Usable'], false),
     );
   }
 }
@@ -137,26 +140,23 @@ class ShopPurchaseResult {
   }
 }
 
-class ComicQuotaUseResult {
-  const ComicQuotaUseResult({
+class ShopItemUseResult {
+  const ShopItemUseResult({
     required this.key,
-    required this.granted,
-    required this.quota,
     required this.owned,
+    required this.message,
   });
 
   final String key;
-  final int granted;
-  final int quota;
   final int owned;
+  final String message;
 
-  static ComicQuotaUseResult decode(Object? value) {
-    final record = asRecord(value, '漫画额度卡使用响应');
-    return ComicQuotaUseResult(
+  static ShopItemUseResult decode(Object? value) {
+    final record = asRecord(value, '道具使用响应');
+    return ShopItemUseResult(
       key: asString(record['Key']),
-      granted: asCount(record['Granted']),
-      quota: asCount(record['Quota']),
       owned: asCount(record['Owned']),
+      message: asStringOrEmpty(record['Message']),
     );
   }
 }
@@ -233,6 +233,21 @@ class SignMakeupResult {
       streak: asCount(record['Streak']),
       reward: asCount(record['Reward']),
       coinReward: asCount(record['CoinReward']),
+      owned: asCount(record['Owned']),
+    );
+  }
+}
+
+class RenameCardResult {
+  const RenameCardResult({required this.userName, required this.owned});
+
+  final String userName;
+  final int owned;
+
+  static RenameCardResult decode(Object? value) {
+    final record = asRecord(value, '改名响应');
+    return RenameCardResult(
+      userName: asString(record['UserName']),
       owned: asCount(record['Owned']),
     );
   }

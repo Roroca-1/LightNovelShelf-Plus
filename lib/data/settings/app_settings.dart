@@ -155,7 +155,7 @@ class ReaderPreferences {
     this.backgroundColorValue = '#F7F1E3',
     this.customTextColorEnabled = false,
     this.textColorValue = '#2B2B2B',
-    this.dualPageEnabled = false,
+    this.dualPageEnabled = true,
     this.centeredTextEnabled = false,
     this.dualPageOffsetEnabled = false,
     this.immersiveEnabled = false,
@@ -233,7 +233,7 @@ class ReaderPreferences {
       textColorValue: textColor is String && _hexPattern.hasMatch(textColor)
           ? textColor.toUpperCase()
           : '#2B2B2B',
-      dualPageEnabled: _bool(values['dualPageEnabled'], false),
+      dualPageEnabled: _bool(values['dualPageEnabled'], true),
       centeredTextEnabled: _bool(values['centeredTextEnabled'], false),
       dualPageOffsetEnabled: _bool(values['dualPageOffsetEnabled'], false),
       immersiveEnabled: _bool(values['immersiveEnabled'], false),

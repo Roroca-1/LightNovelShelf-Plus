@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kana_kit/kana_kit.dart';
 import 'package:pinyin/pinyin.dart';
 
+import '../../app/list_detail.dart';
 import '../../data/api/models.dart';
 import '../../core/platform/desktop_platform.dart';
 import '../../data/api/requests.dart';
@@ -407,7 +408,7 @@ class _ShelfScreenState extends ConsumerState<ShelfScreen> {
   }
 
   void _openBook(BookListItem book) {
-    context.push('/book/${book.id}');
+    context.openPage('/book/${book.id}');
   }
 
   Future<void> _showBookMenu(BookListItem book, Offset position) async {

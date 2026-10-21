@@ -16,15 +16,21 @@ extension ApiClientShop on ApiClient {
     'Quantity': quantity,
   }, ShopPurchaseResult.decode);
 
-  Future<ComicQuotaUseResult> useComicQuotaCard() => invoke(
-    'UseComicQuotaCard',
-    <String, Object?>{},
-    ComicQuotaUseResult.decode,
+  Future<ShopItemUseResult> useShopItem({required String key}) => invoke(
+    'UseShopItem',
+    <String, Object?>{'Key': key},
+    ShopItemUseResult.decode,
   );
 
   Future<SignMakeupResult> useSignMakeupCard({required String date}) => invoke(
     'UseSignMakeupCard',
     <String, Object?>{'Date': date},
     SignMakeupResult.decode,
+  );
+
+  Future<RenameCardResult> useRenameCard({required String userName}) => invoke(
+    'UseRenameCard',
+    <String, Object?>{'UserName': userName},
+    RenameCardResult.decode,
   );
 }
