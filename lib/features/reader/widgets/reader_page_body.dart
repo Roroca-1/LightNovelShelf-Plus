@@ -22,6 +22,7 @@ class ReaderPageBody extends StatelessWidget {
     required this.viewport,
     required this.padding,
     required this.contentWidth,
+    this.emptyHint,
   });
 
   final int sortNum;
@@ -41,11 +42,26 @@ class ReaderPageBody extends StatelessWidget {
   /// 与测量层一致的正文列宽；窄于页面时在页面中央摆放。
   final double contentWidth;
 
+  /// 整章排出来高度为零时摆在页中间的提示，null 留白。
+  final String? emptyHint;
+
   @override
   Widget build(BuildContext context) {
     final geometry = this.geometry;
     if (geometry == null || !renderable || index >= pageTops.length) {
       return const SizedBox.shrink();
+    }
+    final hint = emptyHint;
+    if (hint != null && geometry.height < 1) {
+      return Padding(
+        padding: padding,
+        child: SizedBox(
+          key: readerPageBodyKey(sortNum, index),
+          width: double.infinity,
+          height: viewport.height,
+          child: ReaderEmptyChapterHint(text: hint),
+        ),
+      );
     }
     final top = pageTops[index];
     // 页底裁到下一页的页顶而非整屏高度，否则装不下的那一行行顶落在视口内，
@@ -85,6 +101,27 @@ class ReaderPageBody extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 整章排不出任何内容时摆在栏中间的一句提示（“不显示”模式下只有图像的章），
+/// 免得翻到一张白页、以为正文没加载出来。
+class ReaderEmptyChapterHint extends StatelessWidget {
+  const ReaderEmptyChapterHint({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = DefaultTextStyle.of(context).style.color;
+    return Center(
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: color?.withValues(alpha: 0.6)),
       ),
     );
   }

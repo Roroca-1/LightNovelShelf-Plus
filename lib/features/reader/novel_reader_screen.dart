@@ -16,6 +16,7 @@ import '../../data/repositories/user_font_repository.dart';
 import '../../core/feature_flags.dart';
 import '../../shared/format.dart';
 import '../../shared/widgets/html/reader_content_style.dart';
+import '../../shared/widgets/reader_html_block.dart';
 import 'reader_chapter_prerenderer.dart';
 import 'reader_chapter_window.dart';
 import 'reader_open_position.dart';
@@ -65,6 +66,9 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
   late final ReaderProgressController _progress;
   late final ReaderChapterPrerenderer _prerenderer;
   final ReaderContentController _contentController = ReaderContentController();
+
+  /// “点击显示”模式下这次阅读点开过的图像，退出阅读器才忘掉。
+  final ReaderImageReveals _imageReveals = ReaderImageReveals();
 
   /// 当前章号；加载中为待打开的章号，加载完成后与窗口当前章一致。
   late int _sortNum;
@@ -125,6 +129,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
   @override
   void dispose() {
     _pages.dispose();
+    _imageReveals.dispose();
     _prerenderer.dispose();
     unawaited(_progress.dispose());
     super.dispose();
@@ -315,20 +320,21 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
         ? UserFontRepository.instance.selectedFamily(settings)
         : null;
     return ReaderContentStyle(
-        fontSize: settings.fontSize,
-        lineHeight: settings.readerLineHeight,
-        lineSpace: settings.readerLineSpace,
-        firstLineIndent: settings.readerFirstLineIndent,
-        justify: settings.readerJustify,
-        // 章节字体包含服务端的反复制字形映射，存在时必须优先，否则相同码位会
-        // 被用户字体画成另一个汉字。无章节字体的普通正文才使用用户选择。
-        fontFamily: chapterFont ?? selected,
-        fontFamilyFallback: <String>[
-          if (chapterFont != null && selected != null) selected,
-          'sans-serif',
-          'serif',
-        ],
-      );
+      fontSize: settings.fontSize,
+      lineHeight: settings.readerLineHeight,
+      lineSpace: settings.readerLineSpace,
+      firstLineIndent: settings.readerFirstLineIndent,
+      justify: settings.readerJustify,
+      // 章节字体包含服务端的反复制字形映射，存在时必须优先，否则相同码位会
+      // 被用户字体画成另一个汉字。无章节字体的普通正文才使用用户选择。
+      fontFamily: chapterFont ?? selected,
+      fontFamilyFallback: <String>[
+        if (chapterFont != null && selected != null) selected,
+        'sans-serif',
+        'serif',
+      ],
+      imageMode: settings.readerImageMode,
+    );
   }
 
   ReaderChapterContent? _chapterContent(
@@ -433,6 +439,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
         context,
         html: note,
         fontFamily: chapter?.fontFamily,
+        imageMode: ref.read(appSettingsProvider).readerImageMode,
       ),
     );
   }
@@ -678,7 +685,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
         enabled: reader.volumeKeyPagingEnabled && !_chromeVisible,
         onPrevious: _contentController.previousPage,
         onNext: _contentController.nextPage,
-        child: shell,
+        child: ReaderImageRevealScope(reveals: _imageReveals, child: shell),
       ),
     );
   }
