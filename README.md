@@ -1,3 +1,4 @@
+[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kanasara)
 # 轻书架Plus
 
 轻书架Plus 是基于[轻书架官方 Flutter 客户端](https://github.com/LightNovelShelf/Flutter)继续开发的独立功能扩展版本，重点改善书架管理、桌面端操作、自定义外观与离线缓存体验。
