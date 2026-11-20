@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' show loadFontFromList;
 
@@ -8,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 // woff2.dart 的 @Native assetId 与 hook/build.dart 里的条目都写死了这个库路径，挪走要同步改原生构建，故留在 features 下。
+import '../../core/async/background_worker.dart';
 import '../../features/reader/woff2.dart';
 import '../api/api_client.dart';
 import '../../core/network/request_scheduler.dart';
@@ -41,6 +41,7 @@ class ReaderFontRepository {
     String? fontUrl, {
     bool cacheEnabled = true,
     int cacheLimit = 30,
+    RequestPriority priority = RequestPriority.interactive,
     CancelToken? cancelToken,
   }) {
     final url = resolveFontUrl(fontUrl);
@@ -61,6 +62,7 @@ class ReaderFontRepository {
           family: family,
           cacheEnabled: cacheEnabled,
           cacheLimit: cacheLimit,
+          priority: priority,
           cancelToken: cancelToken,
         ).whenComplete(() {
           _inflight.remove(url);
@@ -69,22 +71,66 @@ class ReaderFontRepository {
     return request;
   }
 
+  /// 仅下载并解码字体到磁盘缓存，不调用 `loadFontFromList` 永久占用引擎字体内存；
+  /// 真正需要渲染时再由 [loadFamily] 从磁盘秒读并注册。
+  Future<void> prefetchToDisk(
+    String? fontUrl, {
+    bool cacheEnabled = true,
+    int cacheLimit = 30,
+    CancelToken? cancelToken,
+  }) async {
+    if (!cacheEnabled) return;
+    final url = resolveFontUrl(fontUrl);
+    if (url == null) return;
+    final digest = _digest(url);
+    final family = 'chapter-font-$digest';
+    if (_registered.contains(family) || _inflight.containsKey(url)) return;
+
+    final file = await _cacheFile(digest);
+    if (await file.exists()) {
+      final cached = await file.readAsBytes();
+      final prepared = await _prepare(cached);
+      if (_isEngineFont(prepared)) {
+        if (!identical(prepared, cached)) {
+          await file.writeAsBytes(prepared, flush: false);
+        }
+        return;
+      }
+      await file.delete();
+    }
+
+    final bytes = await _prepare(
+      Uint8List.fromList(
+        await _api.downloadBytes(
+          Uri.parse(url),
+          priority: RequestPriority.preload,
+          cancelToken: cancelToken,
+        ),
+      ),
+    );
+    if (!_isEngineFont(bytes)) throw const FormatException('章节字体格式无法识别。');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: false);
+    await _trim(file.parent, cacheLimit);
+  }
+
   Future<String> _load(
     String url, {
     required String digest,
     required String family,
     required bool cacheEnabled,
     required int cacheLimit,
+    required RequestPriority priority,
     CancelToken? cancelToken,
   }) async {
     final file = cacheEnabled ? await _cacheFile(digest) : null;
-    if (file != null && file.existsSync()) {
+    if (file != null && await file.exists()) {
       final cached = await file.readAsBytes();
       final prepared = await _prepare(cached);
       if (_isEngineFont(prepared)) {
         // 旧缓存可能是 WOFF2 原件，回写转换结果避免下次重复解码。
         if (!identical(prepared, cached)) {
-          await file.writeAsBytes(prepared, flush: true);
+          await file.writeAsBytes(prepared, flush: false);
         }
         return _register(family, prepared);
       }
@@ -92,13 +138,19 @@ class ReaderFontRepository {
     }
 
     final bytes = await _prepare(
-      Uint8List.fromList(await _api.downloadBytes(Uri.parse(url), cancelToken: cancelToken)),
+      Uint8List.fromList(
+        await _api.downloadBytes(
+          Uri.parse(url),
+          priority: priority,
+          cancelToken: cancelToken,
+        ),
+      ),
     );
     if (!_isEngineFont(bytes)) throw const FormatException('章节字体格式无法识别。');
 
     if (file != null) {
       await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes, flush: true);
+      await file.writeAsBytes(bytes, flush: false);
       await _trim(file.parent, cacheLimit);
     }
     return _register(family, bytes);
@@ -119,17 +171,23 @@ class ReaderFontRepository {
     return File('${directory.path}/$digest.font');
   }
 
-  /// 超出上限时按最后修改时间淘汰最旧的字体文件。
+  /// 超出上限时按最后修改时间异步淘汰最旧的字体文件，不在 UI 线程做同步 stat。
   static Future<void> _trim(Directory directory, int limit) async {
     if (limit <= 0) return;
-    final files = directory.listSync().whereType<File>().toList()
-      ..sort(
-        (left, right) =>
-            left.statSync().modified.compareTo(right.statSync().modified),
-      );
-    for (var index = 0; index < files.length - limit; index++) {
+    final entries = <(File, DateTime)>[];
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
       try {
-        await files[index].delete();
+        entries.add((entity, await entity.lastModified()));
+      } catch (_) {
+        // 文件可能已被并发删除，忽略即可。
+      }
+    }
+    if (entries.length <= limit) return;
+    entries.sort((left, right) => left.$2.compareTo(right.$2));
+    for (var index = 0; index < entries.length - limit; index++) {
+      try {
+        await entries[index].$1.delete();
       } catch (_) {
         // 缓存清理失败不影响阅读。
       }
@@ -140,7 +198,7 @@ class ReaderFontRepository {
     if (_fontMime(bytes) != 'font/woff2') {
       return Future<Uint8List>.value(bytes);
     }
-    return Isolate.run(() => decodeWoff2(bytes));
+    return BackgroundWorker.run(() => decodeWoff2(bytes));
   }
 
   /// WOFF1 没有解码路径，与无法识别的魔数一样视为不可用字体。

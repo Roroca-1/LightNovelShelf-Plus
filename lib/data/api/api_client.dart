@@ -49,9 +49,12 @@ class ApiClient {
     required RateLimitRequestScheduler scheduler,
     required Future<Map<String, String>> Function() headers,
     this.authRetry,
+    http.Client? httpClient,
   }) : _signalR = signalR,
        _scheduler = scheduler,
-       _headers = headers;
+       _headers = headers,
+       _httpClient = httpClient ?? http.Client(),
+       _ownsHttpClient = httpClient == null;
 
   /// 服务端对批量取书的数量上限。
   static const int batchIdLimit = 24;
@@ -61,7 +64,13 @@ class ApiClient {
   final SignalRConnection _signalR;
   final RateLimitRequestScheduler _scheduler;
   final Future<Map<String, String>> Function() _headers;
+  final http.Client _httpClient;
+  final bool _ownsHttpClient;
   AuthRetryHandler? authRetry;
+
+  void close() {
+    if (_ownsHttpClient) _httpClient.close();
+  }
 
   Future<T> invoke<T>(
     String methodName,
@@ -96,7 +105,7 @@ class ApiClient {
         await _signalR.reset();
         continue;
       }
-      return decode(unwrapSignalRResponse(envelope));
+      return decode(await unwrapSignalRResponseAsync(envelope));
     }
   }
 
@@ -115,34 +124,32 @@ class ApiClient {
       ...await _headers(),
     };
     return _scheduler.add(() async {
-      final client = http.Client();
-      try {
-        final request = http.Request(method, uri)..headers.addAll(headers);
-        if (body != null) request.body = jsonEncode(body);
-        final streamed = await client
-            .send(request)
-            .timeout(const Duration(seconds: 30));
-        return await http.Response.fromStream(streamed);
-      } finally {
-        client.close();
-      }
+      final request = http.Request(method, uri)..headers.addAll(headers);
+      if (body != null) request.body = jsonEncode(body);
+      final streamed = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 30));
+      return http.Response.fromStream(streamed);
     });
   }
 
   /// 供章节字体等二进制资源使用，保留应用身份头、限流与超时约束。
-  Future<List<int>> downloadBytes(Uri uri, {CancelToken? cancelToken}) async {
-    return _scheduler.add(() async {
-      final client = http.Client();
-      try {
-        final response = await client
+  Future<List<int>> downloadBytes(
+    Uri uri, {
+    RequestPriority priority = RequestPriority.interactive,
+    CancelToken? cancelToken,
+  }) async {
+    return _scheduler.add(
+      () async {
+        final response = await _httpClient
             .get(uri, headers: await _headers())
             .timeout(const Duration(seconds: 20));
         ensureOk(response, '下载资源失败。');
         return response.bodyBytes;
-      } finally {
-        client.close();
-      }
-    }, cancelToken: cancelToken);
+      },
+      priority: priority,
+      cancelToken: cancelToken,
+    );
   }
 
   Object? decodeHttpBody(http.Response response) {

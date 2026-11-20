@@ -79,7 +79,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Build Android ARM64 release APK
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --split-debug-info=build/symbols/android-arm64 --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
       - name: Verify Plus application ID
         run: |
           apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
@@ -125,7 +125,7 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build linux --release --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
+      - run: flutter build linux --release --split-debug-info=build/symbols/linux-x64 --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
       - name: Package Linux AppImage
         run: |
           mkdir -p dist
@@ -232,7 +232,7 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build windows --release --dart-define=APP_RELEASE_TAG=$env:RELEASE_TAG
+      - run: flutter build windows --release --split-debug-info=build/symbols/windows-x64 --dart-define=APP_RELEASE_TAG=$env:RELEASE_TAG
       - name: Install Inno Setup
         shell: pwsh
         run: |
@@ -276,7 +276,7 @@ jobs:
           pub-cache: true
       - run: flutter pub get
       - name: Build unsigned iOS release app
-        run: flutter build ios --release --no-codesign --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
+        run: flutter build ios --release --no-codesign --split-debug-info=build/symbols/ios-arm64 --dart-define=APP_RELEASE_TAG=$RELEASE_TAG
       - name: Verify Plus application ID
         run: |
           app="build/ios/iphoneos/Runner.app"

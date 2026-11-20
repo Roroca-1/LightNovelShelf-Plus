@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/network/request_scheduler.dart';
 import '../core/network/signalr_connection.dart';
 import '../core/feature_flags.dart';
+import '../core/platform/cache_file_store.dart';
 import '../core/platform/stores.dart';
 import 'api/api_client.dart';
 import 'api/endpoints.dart';
@@ -19,15 +20,17 @@ class AppRuntime {
   AppRuntime({
     required this.credentials,
     required this.keyValueStore,
+    KeyValueStore? cacheStore,
     required this.settings,
     required this.signalR,
     required this.api,
     required this.auth,
     required this.hasStoredSession,
-  });
+  }) : cacheStore = cacheStore ?? keyValueStore;
 
   final CredentialStore credentials;
   final KeyValueStore keyValueStore;
+  final KeyValueStore cacheStore;
   final SettingsController settings;
   final SignalRConnection signalR;
   final ApiClient api;
@@ -49,18 +52,26 @@ class AppRuntime {
 
   static Future<AppRuntime> bootstrap() async {
     CredentialStore credentials = SecureCredentialStore();
-    final keyValueStore = await _startupStep(
+
+    // 偏好存储、UA 与安全凭据互不依赖，并行初始化缩短冷启动时间。
+    final keyValueFuture = _startupStep(
       '本地偏好设置初始化',
       PreferencesKeyValueStore.open,
     );
-    final settings = await _startupStep(
+    final userAgentFuture = _backendUserAgent();
+    final refreshTokenFuture = credentials
+        .read(AuthCredentialKeys.refreshToken)
+        .timeout(const Duration(seconds: 6));
+
+    final keyValueStore = await keyValueFuture;
+    final settingsFuture = _startupStep(
       '应用设置读取',
       () => SettingsController.load(keyValueStore),
     );
+
+    String? refreshToken;
     try {
-      await credentials
-          .read(AuthCredentialKeys.refreshToken)
-          .timeout(const Duration(seconds: 6));
+      refreshToken = await refreshTokenFuture;
     } catch (error) {
       // -34018 是未签名 / TrollStore 安装包缺少 Keychain entitlement 的系统错误。
       // 仅 iOS 在这个明确场景降级，其他平台或其他错误不能静默丢弃。
@@ -72,19 +83,25 @@ class AppRuntime {
         'iOS Keychain entitlement unavailable; using app-local credentials.',
       );
       credentials = KeyValueCredentialStore(keyValueStore);
+      refreshToken = await _startupStep(
+        '安全凭据读取',
+        () => credentials.read(AuthCredentialKeys.refreshToken),
+      );
     }
+
+    final settings = await settingsFuture;
     final customFontPath = settings.settings.customReaderFontPath;
     if (enableReaderFonts && customFontPath != null) {
-      try {
-        await UserFontRepository.instance.load(customFontPath);
-      } catch (_) {
-        // A removed or invalid font never blocks application startup.
-      }
+      // 自定义阅读字体只在进入阅读页时用到，放到后台加载，不阻塞首屏。
+      unawaited(
+        UserFontRepository.instance
+            .load(customFontPath)
+            .then((_) {}, onError: (_) {}),
+      );
     }
     final scheduler = RateLimitRequestScheduler();
     final apiOrigin = settings.settings.apiServer.apiOrigin;
-
-    final userAgent = await _backendUserAgent();
+    final userAgent = await userAgentFuture;
     final visitor = VisitorId(credentials: credentials);
 
     Future<Map<String, String>> backendHeaders() async => <String, String>{
@@ -123,11 +140,12 @@ class AppRuntime {
     return AppRuntime(
       credentials: credentials,
       keyValueStore: keyValueStore,
+      cacheStore: FileCacheStore(legacy: keyValueStore),
       settings: settings,
       signalR: signalR,
       api: api,
       auth: auth,
-      hasStoredSession: await _startupStep('安全凭据读取', auth.hasStoredSession),
+      hasStoredSession: refreshToken != null && refreshToken.isNotEmpty,
     );
   }
 
@@ -139,6 +157,11 @@ class AppRuntime {
     } catch (error) {
       debugPrint('会话初始化失败：$error');
     }
+  }
+
+  Future<void> dispose() async {
+    api.close();
+    await signalR.dispose();
   }
 }
 

@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../../core/async/background_worker.dart';
 import '../../core/network/api_error.dart';
 import 'decode.dart';
+
+/// 超过此长度的 Base64 压缩响应放进后台 worker 解压解析，避免阻塞 UI 帧。
+const int _asyncDecompressThreshold = 8192;
 
 /// 把信封的失败位转成 ApiError，SignalR 与裸 HTTP 两条链路共用。
 void throwIfFailed(Map<String, dynamic> envelope, String fallbackMessage) {
@@ -23,6 +27,20 @@ void throwIfFailed(Map<String, dynamic> envelope, String fallbackMessage) {
 
 /// 解开 SignalR 响应信封 `{success, status, msg, response}`，取出业务数据。
 Object? unwrapSignalRResponse(Object? value) {
+  final payload = _extractSignalRPayload(value);
+  return _decompress(payload);
+}
+
+/// 与 [unwrapSignalRResponse] 语义一致，但大数据包在后台 isolate 解压与解码 JSON。
+Future<Object?> unwrapSignalRResponseAsync(Object? value) async {
+  final payload = _extractSignalRPayload(value);
+  if (payload is String && payload.length >= _asyncDecompressThreshold) {
+    return BackgroundWorker.run(() => _decompress(payload));
+  }
+  return _decompress(payload);
+}
+
+Object? _extractSignalRPayload(Object? value) {
   final envelope = asRecordOrNull(value);
   if (envelope == null) {
     throw const ApiError('服务端返回了无效的响应。', ApiErrorCategory.server);
@@ -32,7 +50,7 @@ Object? unwrapSignalRResponse(Object? value) {
     throw const ApiError('服务端返回了无效的响应。', ApiErrorCategory.server);
   }
   throwIfFailed(envelope, '请求失败。');
-  return _decompress(envelope['Response'] ?? envelope['response']);
+  return envelope['Response'] ?? envelope['response'];
 }
 
 Object? _decompress(Object? value) {

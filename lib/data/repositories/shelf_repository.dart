@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/network/api_error.dart';
+import '../../core/network/request_scheduler.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../providers.dart';
@@ -45,18 +47,22 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   Future<void> _refreshInBackground() async {
     try {
       final snapshot = await _load();
+      if (!ref.mounted) return;
       state = AsyncValue<ShelfSnapshot?>.data(snapshot);
     } catch (_) {
       // Keep the cached shelf visible when background refresh fails.
     }
   }
 
-  Future<ShelfSnapshot> _hydrate(List<ShelfItem> items) async {
+  Future<ShelfSnapshot> _hydrate(
+    List<ShelfItem> items, {
+    required int generation,
+  }) async {
     final bookIds = items
         .where((item) => item.isBook)
         .map((item) => item.bookId!)
         .toList();
-    var books = await ref
+    final books = await ref
         .read(bookMetadataCacheProvider)
         .resolve(bookIds, _api.getBooksByIdsBatched);
     final missingAuthors = books
@@ -67,36 +73,65 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
         )
         .toList();
     if (missingAuthors.isNotEmpty) {
-      final details = await Future.wait(
-        missingAuthors.map((book) async {
-          try {
-            final detail = await _api.getBookInfo(book.id);
-            final author = detail.authorName ?? detail.classification.author;
-            return author == null || author.trim().isEmpty
-                ? book
-                : book.copyWith(authorName: author.trim());
-          } catch (_) {
-            return book;
-          }
-        }),
-      );
-      final enriched = <int, BookListItem>{
-        for (final book in books) book.id: book,
-      };
-      for (final book in details) {
-        enriched[book.id] = book;
-      }
-      books = <BookListItem>[for (final id in bookIds) ?enriched[id]];
-      await ref.read(bookMetadataCacheProvider).putAll(books);
+      // 补全缺失作者走低优先级后台受限并发，不阻塞书架展示也不抢占交互限流配额。
+      unawaited(_backfillMissingAuthors(missingAuthors, generation));
     }
     return ShelfSnapshot(items: sortShelfItems(items), books: books);
+  }
+
+  Future<void> _backfillMissingAuthors(
+    List<BookListItem> missingAuthors,
+    int generation,
+  ) async {
+    const int maxConcurrency = 2;
+    final updated = <int, BookListItem>{};
+    var cursor = 0;
+
+    Future<void> worker() async {
+      while (cursor < missingAuthors.length) {
+        if (!ref.mounted || generation != _mutationGeneration) return;
+        final book = missingAuthors[cursor++];
+        try {
+          final detail = await _api.getBookInfo(
+            book.id,
+            priority: RequestPriority.preload,
+          );
+          final author = detail.authorName ?? detail.classification.author;
+          if (author != null && author.trim().isNotEmpty) {
+            updated[book.id] = book.copyWith(authorName: author.trim());
+          }
+        } catch (_) {
+          // 单个书目补全失败忽略，不影响书架其余内容。
+        }
+      }
+    }
+
+    await Future.wait(
+      List<Future<void>>.generate(
+        math.min(maxConcurrency, missingAuthors.length),
+        (_) => worker(),
+      ),
+    );
+    if (updated.isEmpty || !ref.mounted) return;
+    await ref.read(bookMetadataCacheProvider).putAll(updated.values);
+    if (!ref.mounted || generation != _mutationGeneration) return;
+    final current = state.value;
+    if (current == null) return;
+    final refreshed = ShelfSnapshot(
+      items: current.items,
+      books: <BookListItem>[
+        for (final book in current.books) updated[book.id] ?? book,
+      ],
+    );
+    state = AsyncValue<ShelfSnapshot?>.data(refreshed);
+    await ref.read(bookMetadataCacheProvider).writeShelf(refreshed);
   }
 
   Future<ShelfSnapshot> _load() async {
     await _saveQueue;
     final generation = _mutationGeneration;
     final shelf = await _api.getBookShelf();
-    final snapshot = await _hydrate(shelf.items);
+    final snapshot = await _hydrate(shelf.items, generation: generation);
     if (generation != _mutationGeneration) {
       return state.value ?? snapshot;
     }
@@ -111,40 +146,53 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
     });
   }
 
-  Future<ShelfSnapshot> save(ShelfDraft draft) {
-    final generation = ++_mutationGeneration;
+  Future<T> _enqueueMutation<T>(Future<T> Function() operation) {
+    final next = _saveQueue.then(
+      (_) => operation(),
+      onError: (_) => operation(),
+    );
+    _saveQueue = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
+  Future<ShelfSnapshot> _saveUnlocked(ShelfDraft draft, int generation) async {
     final normalized = ShelfDraft(items: normalizeShelfIndexes(draft.items));
-    final operation = _saveQueue.then((_) async {
-      await _api.saveBookShelf(UserShelf(items: normalized.items));
-      final knownBooks = <int, BookListItem>{
-        for (final book in state.value?.books ?? const <BookListItem>[])
-          book.id: book,
-      };
-      final missingIds = normalized.items
-          .where((item) => item.isBook && !knownBooks.containsKey(item.bookId))
-          .map((item) => item.bookId!)
-          .toList();
-      for (final book in await _api.getBooksByIdsBatched(missingIds)) {
+    await _api.saveBookShelf(UserShelf(items: normalized.items));
+    final knownBooks = <int, BookListItem>{
+      for (final book in state.value?.books ?? const <BookListItem>[])
+        book.id: book,
+    };
+    final missingIds = normalized.items
+        .where((item) => item.isBook && !knownBooks.containsKey(item.bookId))
+        .map((item) => item.bookId!)
+        .toList();
+    if (missingIds.isNotEmpty) {
+      for (final book in await ref
+          .read(bookMetadataCacheProvider)
+          .resolve(missingIds, _api.getBooksByIdsBatched)) {
         knownBooks[book.id] = book;
       }
-      final nextIds = normalized.items
-          .where((item) => item.isBook)
-          .map((item) => item.bookId!)
-          .toSet();
-      final snapshot = ShelfSnapshot(
-        items: normalized.items,
-        books: knownBooks.values
-            .where((book) => nextIds.contains(book.id))
-            .toList(),
-      );
-      if (generation == _mutationGeneration) {
-        state = AsyncValue<ShelfSnapshot?>.data(snapshot);
-      }
-      await ref.read(bookMetadataCacheProvider).writeShelf(snapshot);
-      return snapshot;
-    });
-    _saveQueue = operation.then((_) {}, onError: (_) {});
-    return operation;
+    }
+    final nextIds = normalized.items
+        .where((item) => item.isBook)
+        .map((item) => item.bookId!)
+        .toSet();
+    final snapshot = ShelfSnapshot(
+      items: normalized.items,
+      books: knownBooks.values
+          .where((book) => nextIds.contains(book.id))
+          .toList(),
+    );
+    if (ref.mounted && generation == _mutationGeneration) {
+      state = AsyncValue<ShelfSnapshot?>.data(snapshot);
+    }
+    await ref.read(bookMetadataCacheProvider).writeShelf(snapshot);
+    return snapshot;
+  }
+
+  Future<ShelfSnapshot> save(ShelfDraft draft) {
+    final generation = ++_mutationGeneration;
+    return _enqueueMutation(() => _saveUnlocked(draft, generation));
   }
 
   /// 没有缓存快照时回源查询。
@@ -164,79 +212,92 @@ class ShelfController extends AsyncNotifier<ShelfSnapshot?> {
   Future<bool> toggleBook(
     int bookId, {
     ShelfItemType type = ShelfItemType.novel,
-  }) async {
+  }) {
     if (bookId <= 0) {
-      throw ArgumentError('无效的书籍 ID。');
+      return Future<bool>.error(ArgumentError('无效的书籍 ID。'));
     }
-    final shelf = await _api.getBookShelf();
-    final isInShelf = shelfContainsBook(shelf.items, bookId, type: type);
-    final items = isInShelf
-        ? shelf.items
-              .where(
-                (item) =>
-                    !item.isBook || item.bookId != bookId || item.type != type,
-              )
-              .toList()
-        : <ShelfItem>[
-            ShelfItem.book(
-              type: type,
-              id: bookId,
-              index: -1,
-              parents: const <String>[],
-              updatedAt: DateTime.now().toUtc().toIso8601String(),
-            ),
-            ...shelf.items,
-          ];
-    await save(ShelfDraft(items: items));
-    return !isInShelf;
+    final generation = ++_mutationGeneration;
+    return _enqueueMutation(() async {
+      final shelf = await _api.getBookShelf();
+      final isInShelf = shelfContainsBook(shelf.items, bookId, type: type);
+      final items = isInShelf
+          ? shelf.items
+                .where(
+                  (item) =>
+                      !item.isBook ||
+                      item.bookId != bookId ||
+                      item.type != type,
+                )
+                .toList()
+          : <ShelfItem>[
+              ShelfItem.book(
+                type: type,
+                id: bookId,
+                index: -1,
+                parents: const <String>[],
+                updatedAt: DateTime.now().toUtc().toIso8601String(),
+              ),
+              ...shelf.items,
+            ];
+      await _saveUnlocked(ShelfDraft(items: items), generation);
+      return !isInShelf;
+    });
   }
 
   /// 一次把多本书加入根目录；已在书架中的条目保持原位置且不会重复。
-  Future<int> addBooks(Iterable<int> bookIds) async {
+  Future<int> addBooks(Iterable<int> bookIds) {
     final ids = bookIds.where((id) => id > 0).toSet();
-    if (ids.isEmpty) return 0;
-    final shelf = await _api.getBookShelf();
-    final existing = shelf.items
-        .where((item) => item.isBook)
-        .map((item) => item.bookId!)
-        .toSet();
-    final missing = ids.difference(existing);
-    if (missing.isEmpty) return 0;
-    final now = DateTime.now().toUtc().toIso8601String();
-    await save(
-      ShelfDraft(
-        items: <ShelfItem>[
-          for (final id in missing)
-            ShelfItem.book(
-              id: id,
-              index: -1,
-              parents: const <String>[],
-              updatedAt: now,
-            ),
-          ...shelf.items,
-        ],
-      ),
-    );
-    return missing.length;
+    if (ids.isEmpty) return Future<int>.value(0);
+    final generation = ++_mutationGeneration;
+    return _enqueueMutation(() async {
+      final shelf = await _api.getBookShelf();
+      final existing = shelf.items
+          .where((item) => item.isBook)
+          .map((item) => item.bookId!)
+          .toSet();
+      final missing = ids.difference(existing);
+      if (missing.isEmpty) return 0;
+      final now = DateTime.now().toUtc().toIso8601String();
+      await _saveUnlocked(
+        ShelfDraft(
+          items: <ShelfItem>[
+            for (final id in missing)
+              ShelfItem.book(
+                id: id,
+                index: -1,
+                parents: const <String>[],
+                updatedAt: now,
+              ),
+            ...shelf.items,
+          ],
+        ),
+        generation,
+      );
+      return missing.length;
+    });
   }
 
   /// 一次从书架移出多本书，文件夹和其余条目的位置保持不变。
-  Future<int> removeBooks(Iterable<int> bookIds) async {
+  Future<int> removeBooks(Iterable<int> bookIds) {
     final ids = bookIds.where((id) => id > 0).toSet();
-    if (ids.isEmpty) return 0;
-    final shelf = await _api.getBookShelf();
-    final removed = shelf.items
-        .where((item) => item.isBook && ids.contains(item.bookId))
-        .length;
-    if (removed == 0) return 0;
-    await save(
-      ShelfDraft(
-        items: shelf.items
-            .where((item) => !item.isBook || !ids.contains(item.bookId))
-            .toList(),
-      ),
-    );
-    return removed;
+    if (ids.isEmpty) return Future<int>.value(0);
+    final generation = ++_mutationGeneration;
+    return _enqueueMutation(() async {
+      final shelf = await _api.getBookShelf();
+      final removed = shelf.items
+          .where((item) => item.isBook && ids.contains(item.bookId))
+          .length;
+      if (removed == 0) return 0;
+      await _saveUnlocked(
+        ShelfDraft(
+          items: shelf.items
+              .where((item) => !item.isBook || !ids.contains(item.bookId))
+              .toList(),
+        ),
+        generation,
+      );
+      return removed;
+    });
   }
 }
 

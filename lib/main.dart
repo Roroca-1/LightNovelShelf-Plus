@@ -26,6 +26,10 @@ const String _injectedRefreshToken = String.fromEnvironment('REFRESH_TOKEN');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 按平台收紧全局解码图缓存上限，防止高分漫画与大量封面撑爆移动端内存。
+  PaintingBinding.instance.imageCache
+    ..maximumSize = isDesktopPlatform ? 400 : 250
+    ..maximumSizeBytes = isDesktopPlatform ? 128 << 20 : 72 << 20;
   runApp(const _AppBootstrap());
 }
 
@@ -47,14 +51,16 @@ class _AppBootstrapState extends State<_AppBootstrap> {
   }
 
   Future<AppRuntime> _bootstrap() async {
-    await AppSystemUi.restoreDefault(
-      WidgetsBinding.instance.platformDispatcher.platformBrightness,
-    );
-    await initializeDateFormatting('zh_CN');
-    final runtime = await AppRuntime.bootstrap().timeout(
-      const Duration(seconds: 20),
-      onTimeout: () => throw TimeoutException('本地存储初始化超时。'),
-    );
+    final (_, _, runtime) = await (
+      AppSystemUi.restoreDefault(
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+      ),
+      initializeDateFormatting('zh_CN'),
+      AppRuntime.bootstrap().timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('本地存储初始化超时。'),
+      ),
+    ).wait;
     if (_injectedRefreshToken.isNotEmpty) {
       await runtime.credentials.write(
         AuthCredentialKeys.refreshToken,
@@ -149,14 +155,29 @@ class LightNovelShelfApp extends ConsumerStatefulWidget {
   ConsumerState<LightNovelShelfApp> createState() => _LightNovelShelfAppState();
 }
 
-class _LightNovelShelfAppState extends ConsumerState<LightNovelShelfApp> {
+class _LightNovelShelfAppState extends ConsumerState<LightNovelShelfApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 更新提示挂在根导航上，要等首帧把 Navigator 建好。
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(ref.read(appUpdaterProvider).checkOnLaunch()),
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
   }
 
   @override

@@ -105,8 +105,15 @@ extension ApiClientCatalog on ApiClient {
     'Order': order.wire,
   }, ComicSeriesListPage.decode);
 
-  Future<BookDetail> getBookInfo(int id) =>
-      invoke('GetBookInfo', <String, Object?>{'Id': id}, BookDetail.decode);
+  Future<BookDetail> getBookInfo(
+    int id, {
+    RequestPriority priority = RequestPriority.interactive,
+  }) => invoke(
+    'GetBookInfo',
+    <String, Object?>{'Id': id},
+    BookDetail.decode,
+    priority: priority,
+  );
 
   Future<NovelContent> getNovelContent({
     required int bookId,

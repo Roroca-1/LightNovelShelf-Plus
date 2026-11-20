@@ -1,7 +1,7 @@
 name: lightnovel_shelf_plus
 description: 轻书架Plus 多平台客户端。
 publish_to: 'none'
-version: 1.13.2+26
+version: 1.13.2+27
 
 environment:
   sdk: ^3.13.0

@@ -40,4 +40,6 @@ final Provider<ReaderFontRepository> readerFontRepositoryProvider =
     Provider<ReaderFontRepository>((ref) => ReaderFontRepository(ref.watch(apiClientProvider)));
 
 final Provider<BookMetadataCache> bookMetadataCacheProvider =
-    Provider<BookMetadataCache>((ref) => BookMetadataCache(ref.watch(appRuntimeProvider).keyValueStore));
+    Provider<BookMetadataCache>(
+      (ref) => BookMetadataCache(ref.watch(appRuntimeProvider).cacheStore),
+    );

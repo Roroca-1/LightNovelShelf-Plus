@@ -60,6 +60,13 @@ android {
         }
 
         release {
+            // 启用 R8 代码与资源裁剪，显著减小安装包体积与方法数。
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // CI 注入正式签名；本地未配置时保留 debug 签名，方便调试 release 模式。
             signingConfig =
                 if (hasReleaseSigning) {

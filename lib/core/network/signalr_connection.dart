@@ -13,6 +13,7 @@ const String _recordSeparator = '\u001e';
 const Duration _handshakeTimeout = Duration(seconds: 30);
 const Duration _invokeTimeout = Duration(seconds: 30);
 const Duration _pingInterval = Duration(seconds: 15);
+const Duration _serverSilenceTimeout = Duration(seconds: 45);
 
 /// 服务端主动推送（如 `OnMessage` 公告）。
 class ServerInvocation {
@@ -49,6 +50,8 @@ class SignalRConnection {
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _pingTimer;
+  Timer? _reconnectTimer;
+  DateTime _lastServerActivity = DateTime.now();
   Completer<void>? _handshake;
   Future<void>? _connecting;
   int _invocationId = 0;
@@ -69,6 +72,8 @@ class SignalRConnection {
 
   Future<void> connect() {
     _desiredConnected = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     if (_state == SignalRState.connected) return Future<void>.value();
     return _connecting ??= _connect().whenComplete(() => _connecting = null);
   }
@@ -122,10 +127,19 @@ class SignalRConnection {
     }
 
     _retryCount = 0;
+    _lastServerActivity = DateTime.now();
     _setState(SignalRState.connected);
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(_pingInterval, (_) {
       if (_state != SignalRState.connected) return;
+      if (DateTime.now().difference(_lastServerActivity) >
+          _serverSilenceTimeout) {
+        _onClosed(
+          generation,
+          const ApiError('连接超时无响应。', ApiErrorCategory.network),
+        );
+        return;
+      }
       _send(<String, Object?>{'type': 6});
     });
   }
@@ -142,6 +156,7 @@ class SignalRConnection {
   }
 
   void _onData(dynamic data) {
+    _lastServerActivity = DateTime.now();
     final text = data is String ? data : utf8.decode((data as List<int>));
     for (final frame in text.split(_recordSeparator)) {
       if (frame.isEmpty) continue;
@@ -213,7 +228,11 @@ class SignalRConnection {
   void _send(Map<String, Object?> message) {
     final channel = _channel;
     if (channel == null) return;
-    channel.sink.add('${jsonEncode(message)}$_recordSeparator');
+    try {
+      channel.sink.add('${jsonEncode(message)}$_recordSeparator');
+    } catch (error) {
+      _onClosed(_generation, error);
+    }
   }
 
   Future<Object?> invoke(String target, List<Object?> arguments) async {
@@ -267,8 +286,10 @@ class SignalRConnection {
     final delays = <int>[0, 5000, 10000, 20000];
     final delay = _retryCount < delays.length ? delays[_retryCount] : 30000;
     _retryCount += 1;
-    Timer(Duration(milliseconds: delay), () {
-      if (!_desiredConnected) return;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(milliseconds: delay), () {
+      _reconnectTimer = null;
+      if (!_desiredConnected || generation != _generation) return;
       unawaited(connect().catchError((_) {}));
     });
   }
@@ -286,6 +307,8 @@ class SignalRConnection {
   Future<void> close() async {
     _desiredConnected = false;
     _generation += 1;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _pingTimer?.cancel();
     _pingTimer = null;
     await _teardown();

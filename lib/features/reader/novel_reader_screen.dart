@@ -246,12 +246,25 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
       convert: convert,
       fontCacheEnabled: settings.fontCacheEnabled,
       fontCacheLimit: settings.fontCacheLimit,
+      registerFont: false,
     );
     if (prepared == null || !mounted) return;
     final current = ref.read(appSettingsProvider);
     if (!current.readerPrerenderAdjacent) return;
     if (readerConvertParam(current.convertType) != convert) return;
-    _join(prepared);
+    if (!_window.canJoin(prepared.sortNum)) return;
+    final ready = await _prerenderer.ensureFontRegistered(
+      prepared,
+      convert: convert,
+      fontCacheEnabled: current.fontCacheEnabled,
+      fontCacheLimit: current.fontCacheLimit,
+    );
+    if (!mounted) return;
+    if (readerConvertParam(ref.read(appSettingsProvider).convertType) !=
+        convert) {
+      return;
+    }
+    _join(ready);
   }
 
   /// 正文视图翻到了翻页条之外：把那一章接进窗口，正文视图在加载栏上等着。

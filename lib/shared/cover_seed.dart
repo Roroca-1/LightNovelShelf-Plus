@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
+
+import '../core/async/background_worker.dart';
+
+const Duration _decodeTimeout = Duration(seconds: 10);
 
 /// 从封面取一个适合当主题种子的颜色。
 ///
@@ -30,12 +33,12 @@ Future<Color?> resolveCoverSeedColor(
 /// `rawRgba` 四字节一像素，全透明像素不参与统计；所有颜色都不适合当 seed 时退回
 /// 出现最多的那个，而不是 `Score` 内置的兜底色。
 ///
-/// 量化是 k-means，整段放在 [Isolate.run] 上执行。
+/// 量化是 k-means，整段放在后台 worker isolate 上执行。
 Future<Color?> seedColorFromRawRgba(
   Uint8List bytes, {
   int maximumColorCount = 8,
 }) async {
-  final argb = await Isolate.run(
+  final argb = await BackgroundWorker.run(
     () => _seedArgbFromRawRgba(bytes, maximumColorCount),
   );
   return argb == null ? null : Color(argb);
@@ -82,13 +85,25 @@ Future<ui.Image> _decodeScaled(ImageProvider<Object> provider, Size size) {
   listener = ImageStreamListener(
     (info, _) {
       stream.removeListener(listener);
-      completer.complete(info.image);
+      if (!completer.isCompleted) {
+        completer.complete(info.image);
+      } else {
+        info.dispose();
+      }
     },
     onError: (error, stackTrace) {
       stream.removeListener(listener);
-      completer.completeError(error, stackTrace);
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
     },
   );
   stream.addListener(listener);
-  return completer.future;
+  return completer.future.timeout(
+    _decodeTimeout,
+    onTimeout: () {
+      stream.removeListener(listener);
+      throw TimeoutException('图片解码超时。', _decodeTimeout);
+    },
+  );
 }

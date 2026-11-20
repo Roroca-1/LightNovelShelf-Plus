@@ -1,207 +1,80 @@
-[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kanasara)
 # 轻书架Plus
 
-轻书架Plus 是基于[轻书架官方 Flutter 客户端](https://github.com/LightNovelShelf/Flutter)继续开发的独立功能扩展版本，重点改善书架管理、桌面端操作、自定义外观与离线缓存体验。
+轻书架的小说与漫画客户端。手机上按系列整理书架，平板上摊开两页阅读，电脑上用键鼠选书、翻页。
 
-当前正式支持：
+**[下载最新版](https://github.com/Roroca-1/LightNovelShelf-Plus/releases/latest)** · [更新日志](CHANGELOG.md) · [问题与建议](https://github.com/Roroca-1/LightNovelShelf-Plus/issues)
 
-- Android ARM64（`arm64-v8a`）
-- Linux x86_64（AppImage）
-- Windows x86_64
-- iOS（无签名构建产物；需由使用者自行签名后安装）
+## Plus 功能演示
 
-项目包名为 `lightnovel_shelf_plus`，Android / iOS 应用标识为 `app.lightnovel.shelf.plus`，因此可以与官方版轻书架同时安装。iOS 项目不包含开发团队、证书或配置文件；CI 和发布仅生成未签名产物。未签名的 iOS 应用不能直接装到真机，使用者须使用自己的 Apple 开发者证书或其他合法签名方式安装。
+以下是 Plus 在[官方客户端 v1.13.2](https://github.com/LightNovelShelf/Flutter/tree/6105cef68c7a09abcf8ec5e80cc5d107f2418462) 基础上增加的操作。截图中的书目为示例，点图可放大。
 
-## 相较官方版新增的功能
+### 桌面右键选书
 
-### 书架与系列管理
+在 Windows 或 Linux 上右键一本书，即可直接阅读、查找同系列或管理书架。[桌面快捷键](docs/桌面快捷键.md)
 
-- 书架支持“单本 / 系列”显示，并记住上次选择。
-- 书架与历史记录支持“网格 / 列表”显示，并记住上次选择。
-- 系列内也支持网格和列表模式；从书架打开系列后始终按标题排序，以保持卷册阅读顺序。
-- “全部小说”提供相互独立的“单本 / 系列”和“网格 / 列表”开关，可自由组合。
-- 在发现页系列中长按进入多选，支持选择多个卷册、全选并批量加入书架。
-- 书架单本模式和系列子页均支持多选、全选与批量移出书架。
-- 书架排序为纯显示排序，不修改服务端手动顺序：
-  - 手动顺序
-  - 标题升序、降序（中文优先按拼音；检测到假名时使用罗马字）
-  - 最近更新、最早更新
-  - 最近加入
-- 漫画可加入本地书架，不调用只适用于小说系列的功能。
-- 列表条目补充作者、更新时间等信息；系列条目显示卷数和更新时间。
-- 阅读页进度条切换页数，而非章节
-- 滚动模式可依靠滚动切换章节
+[![桌面端书籍右键菜单，可直接阅读或搜索系列](docs/images/desktop-book-menu.png)](docs/images/desktop-book-menu.png)
 
-### 浏览与阅读
+### 整理书架
 
-- 发现、排行榜、全部小说、系列、书架和历史等书籍入口支持桌面端右键菜单。
-- 桌面端右键菜单可直接阅读（跳过详情页）、搜索系列、加入/移出书架或进入多选。
-- 阅读页支持独立文字颜色设置。
-- 自动签到：应用启动后自动执行，成功时显示获得的经验、金币、连续签到天数和等级。
-
-### 外观与桌面适配
-
-- 支持自定义 Material 3 / Material You 主题色、系统动态配色和 OLED 纯黑模式。
-- 自定义应用背景与阅读背景，可以一键同步设置。
-- 背景图片支持亮度、模糊和 Material You 配色提取。
-- Linux、Windows 使用更适合键鼠与高 DPI 显示器的宽屏布局和文字缩放。（待完善）
-- 桌面端支持键盘焦点浏览、连续选择和右键快捷操作。
-
-### 缓存与性能
-
-- 首页、书架、阅读历史和个人资料优先显示本地缓存，再在后台刷新服务端数据。
-- 登录状态尚在恢复时继续显示缓存内容，减少短暂出现“登录后查看书架”的情况。
-- 优化封面图片缓存、尺寸请求、预解码和漫画阅读预加载。
-- 优化书架草稿、系列分组与页面间切换，减少不必要的全页重建。
-- 自定义背景会压缩导入尺寸并复用已解码图片，降低内存、模糊和路由切换开销。
-- 设置中提供清除全部缓存、图片缓存和阅读字体缓存的入口。
-
-
-
-## Linux / Windows 键鼠操作
-
-键鼠功能仅在 Linux 和 Windows 启用。
-
-### 应用与书籍列表
-
-| 操作 | 功能 |
+| 在发现页批量加书 | 给自己的书架排序 |
 | --- | --- |
-| `Ctrl+Tab` | 向右循环切换发现、书架、历史、社区、搜索 |
-| `Ctrl+Shift+Tab` | 向左循环切换底栏 |
-| `Tab` / `Shift+Tab` | 在当前页面可操作条目间向前 / 向后移动焦点 |
-| `Enter` | 打开当前聚焦条目 |
-| `Space` | 在书架中选择 / 取消选择当前书籍，并自动进入选择模式 |
-| `Ctrl+A` | 在书架选择模式中选择当前层级全部可用书籍 |
-| `Ctrl+单击` | 添加或取消一个书架条目的选择 |
-| `Shift+单击` | 从上一个选择锚点连续选择到当前书架条目 |
-| `Esc` | 退出选择模式；没有选择状态时返回上一级 |
-| 鼠标右键 | 在鼠标位置打开书籍快捷菜单 |
+| [![系列中第 2、4 卷已勾选，右上角显示「加入书架」](docs/images/series-selection.png)](docs/images/series-selection.png) | [![书架排序菜单已选「最近更新」，最新的第 6 卷排在最前](docs/images/shelf-sort.png)](docs/images/shelf-sort.png) |
+| 长按一本进入多选，勾选想看的卷册，一次加入书架。 | 按标题（拼音／罗马字）、更新时间或加入时间浏览，随时切回手动顺序。 |
 
-### 小说阅读器
+### 把喜欢的图设为阅读背景
 
-| 操作 | 功能 |
+| 在「外观」调整图片 | 打开小说查看效果 |
 | --- | --- |
-| `←` / `Page Up` | 上一页或上一屏 |
-| `→` / `Page Down` | 下一页或下一屏 |
-| `Space` | 下一页或下一屏 |
-| `Shift+Space` | 上一页或上一屏 |
-| `Esc` | 第一次显示阅读菜单；菜单已显示时返回书籍详情页 |
+| [![背景亮度设为 75%，「同步到阅读背景」已开启](docs/images/background-settings.png)](docs/images/background-settings.png) | [![小说正文下显示同一幅海港灯塔背景](docs/images/background-reader.png)](docs/images/background-reader.png) |
 
-## 本地开发与检查
+应用和阅读器可以分别选图。想两处共用，就打开「同步到阅读背景」，亮度和模糊度也会一起同步。
 
-项目 CI 使用 Flutter `3.47.0` 和 Java 17。建议本地使用相同版本：
+<details>
+<summary>查看系列分卷列表和主题色选择器</summary>
 
-```bash
-flutter --version
-flutter pub get
-flutter analyze
-flutter test
-flutter run -d <device>
-```
+| 在书架按系列找书 | 自定义应用主题色 |
+| --- | --- |
+| [![书架中按卷排列的六本示例书籍](docs/images/shelf.png)](docs/images/shelf.png) | [![主题色选择器，可输入 HEX 或调整滑杆](docs/images/appearance.png)](docs/images/appearance.png) |
 
-## 编译 iOS（无签名）
+在书架点开系列就能按卷选书。应用配色支持自选颜色，也能从背景图提取。
 
-需要 macOS、Xcode 和 Flutter。项目不会写入签名信息；可先在模拟器测试：
+</details>
 
-```bash
-flutter pub get
-flutter test
-flutter run -d <ios-simulator-id>
-```
+<details>
+<summary>双页阅读与其他功能</summary>
 
-生成可自行签名的真机 Release 应用：
+![小说横屏双页阅读，正文为示例文本](docs/images/reader-spread.png)
 
-```bash
-flutter build ios --release --no-codesign
-```
+- **阅读**　横屏足够宽时，小说和漫画都能双页并排，漫画封面可独占一页。小说翻页时按页跳转，滚动时按本章百分比定位，滑到章尾再继续滑即可换章。插图可放大，有原图时可切换查看。
+- **书架与历史**　小说和漫画可同步到账号书架，用文件夹收纳。书架与历史会记住网格或列表偏好；书架还支持按类型筛选、批量移出。
+- **平板与桌面**　宽屏可用侧边导航和左右分栏；Linux、Windows 支持连续多选和键盘翻页。
+- **外观与缓存**　可单独设置阅读文字颜色。Android 支持系统壁纸配色和 OLED 纯黑。首页、书架和历史优先展示已有缓存，可分别清理图片和章节字体缓存。
+- **账号与更新**　支持自动签到和启动时检查更新。Android 可在应用内下载安装包，桌面与 iOS 可从更新提示打开下载页。设置页可恢复默认偏好。
 
-产物位于 `build/ios/iphoneos/Runner.app`。Release workflow 会将它打包为未签名的 `.ipa`；用户须在自己的 macOS 环境中用自己的证书完成签名后才能安装。本项目不收集或分发任何签名材料。无签名 IPA 在 TrollStore 等环境没有 Keychain entitlement 时，会把登录凭据降级保存在应用私有偏好设置中；这比 Keychain 的保护弱，仅应在自主管理的设备上使用。
+</details>
 
-如需注入刷新令牌：
+## 下载与安装
 
-```bash
-flutter run -d <device> --dart-define=REFRESH_TOKEN=<refresh-token>
-```
+| 平台 | 选择的安装包 |
+| --- | --- |
+| Android ARM64 | `arm64-v8a.apk`，可与官方版共存 |
+| Windows x86_64 | `setup.exe` 安装程序 |
+| Linux x86_64 | AppImage、Debian `.deb` 或 Arch `.pkg.tar.zst` |
+| iOS | 未签名 `.ipa`，真机安装前需自行签名 |
 
-## 编译 Android ARM64
+Linux 上注册和重置密码需要在网页完成人机验证。自行编译、iOS 签名与凭据存储说明见[本地构建指南](docs/本地构建.md)。
 
-需要 Android SDK、Java 17，并确保 `flutter doctor -v` 能识别 Android toolchain。
+## 致谢与支持
 
-```bash
-flutter pub get
-flutter build apk --release \
-  --target-platform android-arm64 \
-  --split-per-abi
-```
+Plus 基于[轻书架官方 Flutter 客户端](https://github.com/LightNovelShelf/Flutter)继续开发。感谢上游贡献者、原作 [Novella](https://github.com/celia-sh/Novella) 和提供界面交互思路的 [Kanscape](https://github.com/Kanscape)。
 
-输出：
+[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kanasara)
 
-```text
-build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-```
+<details>
+<summary>赞助轻书架网站</summary>
 
-未配置仓库签名密钥时，项目使用现有的调试签名回退。这样的 APK 可以测试安装，但可能无法覆盖安装使用其他证书签名的版本。
+[爱发电](https://www.ifdian.net/a/wuyu8512)
 
-## 编译 Linux x86_64
+<img src=".github/afdian.jpeg" height="220" alt="轻书架网站爱发电赞助二维码">
 
-Arch / CachyOS 依赖：
-
-```bash
-sudo pacman -S --needed \
-  clang cmake ninja pkgconf gtk3 libsecret \
-  base-devel git curl unzip xz zip
-```
-
-编译 release bundle：
-
-```bash
-flutter config --enable-linux-desktop
-flutter pub get
-flutter build linux --release
-```
-
-输出目录：
-
-```text
-build/linux/x64/release/bundle/
-```
-
-仓库的 Release workflow 会使用 `linuxdeploy` 将此 bundle 封装为 x86_64 AppImage。
-
-## 编译 Windows x86_64
-
-需要 Windows 10/11、Visual Studio 2022，并安装“使用 C++ 的桌面开发”工作负载：
-
-```powershell
-flutter config --enable-windows-desktop
-flutter pub get
-flutter build windows --release
-```
-
-输出目录：
-
-```text
-build\windows\x64\runner\Release\
-```
-
-发布时必须保留该目录中的 EXE、DLL 和 `data` 文件夹，不能只复制可执行文件。
-
-
-
-## 提交问题与功能建议
-
-请在[轻书架Plus Issues](https://github.com/Roroca-1/LightNovelShelf-Plus/issues)提交问题。报告界面或性能问题时，请附上平台、应用版本、复现步骤以及截图或录屏。
-
-## 赞助本站
-
-<a href="https://www.ifdian.net/a/wuyu8512">赞助</a>本站可以帮助我购买更多的 Token，来使网站变得更好
-
-<img src=".github/afdian.jpeg" height="300">
-
-## 致谢
-
-轻书架Plus 基于[轻书架官方 Flutter 客户端](https://github.com/LightNovelShelf/Flutter)继续开发，感谢上游项目及其贡献者提供完整的服务端客户端基础。
-
-基于 https://github.com/celia-sh/Novella 的 Flutter 版本重新开发得来
-
-感谢 https://github.com/Kanscape 提供的 UI 布局交互思路，如果你需要体验 iOS 上的原生组件，不妨试试上述第三方客户端
+</details>

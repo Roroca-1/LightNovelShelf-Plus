@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:isolate';
+import 'dart:collection';
 
+import '../../core/async/background_worker.dart';
 import '../../core/network/request_scheduler.dart';
 import '../../core/network/api_error.dart';
 import '../../data/api/api_client.dart';
@@ -10,9 +11,9 @@ import '../../shared/widgets/html/html_source.dart';
 import 'reader_footnotes.dart';
 import 'reader_html_document.dart';
 
-/// 小说章节预渲染：取数、分块、脚注抽取、字体注册一次完成，供章节窗口取用。
+/// 小说章节预渲染：取数、分块、脚注抽取、字体准备一次完成，供章节窗口取用。
 
-/// 预渲染好的一章：正文已分块、注文已摘出、章节字体已注册进引擎。
+/// 预渲染好的一章：正文已分块、注文已摘出；字体按需延迟注册进引擎。
 class ReaderPreparedChapter {
   const ReaderPreparedChapter({
     required this.content,
@@ -30,6 +31,22 @@ class ReaderPreparedChapter {
 
   NovelChapterContent get chapter => content.chapter;
   int get sortNum => content.chapter.sortNum;
+
+  bool get needsFontRegistration =>
+      fontFamily == null &&
+      fontWarning == null &&
+      (chapter.fontUrl?.trim().isNotEmpty ?? false);
+
+  ReaderPreparedChapter withFont({
+    required String? fontFamily,
+    String? fontWarning,
+  }) => ReaderPreparedChapter(
+    content: content,
+    blocks: blocks,
+    notes: notes,
+    fontFamily: fontFamily,
+    fontWarning: fontWarning,
+  );
 }
 
 class _PrerenderEntry {
@@ -45,12 +62,13 @@ class _PrerenderEntry {
 
 /// 章节预渲染：取数、分块、脚注、字体一次备齐。
 ///
-/// 取回来的章一直留在缓存里，同一次阅读中不会重复请求，直到 [dispose]。
+/// 使用有界 LRU 缓存（默认保留最近 8 章），长篇连读不无限占用内存。
 class ReaderChapterPrerenderer {
   ReaderChapterPrerenderer({
     required ApiClient api,
     required ReaderFontRepository fonts,
     required int bookId,
+    this.maxCachedChapters = 8,
   }) : _api = api,
        _fonts = fonts,
        _bookId = bookId;
@@ -58,8 +76,27 @@ class ReaderChapterPrerenderer {
   final ApiClient _api;
   final ReaderFontRepository _fonts;
   final int _bookId;
-  final Map<(int, String?), _PrerenderEntry> _entries =
-      <(int, String?), _PrerenderEntry>{};
+  final int maxCachedChapters;
+  final LinkedHashMap<(int, String?), _PrerenderEntry> _entries =
+      LinkedHashMap<(int, String?), _PrerenderEntry>();
+
+  int get cachedCount => _entries.length;
+
+  void _touch((int, String?) key, _PrerenderEntry entry) {
+    _entries.remove(key);
+    _entries[key] = entry;
+  }
+
+  void _evictOverflow({(int, String?)? protect}) {
+    while (_entries.length > maxCachedChapters) {
+      final oldestKey = _entries.keys.firstWhere(
+        (key) => key != protect,
+        orElse: () => _entries.keys.first,
+      );
+      if (oldestKey == protect) break;
+      _discard(oldestKey);
+    }
+  }
 
   /// 打开某一章，已备好或在途的结果直接复用。[fresh] 强制重取，用于需要服务端
   /// 最新 ReadPosition 的场景。
@@ -69,43 +106,101 @@ class ReaderChapterPrerenderer {
     required bool fresh,
     required bool fontCacheEnabled,
     required int fontCacheLimit,
-  }) {
+  }) async {
     final key = (sortNum, convert);
     final existing = _entries[key];
-    if (!fresh && existing != null && !existing.failed) return existing.future;
+    if (!fresh && existing != null && !existing.failed) {
+      _touch(key, existing);
+      final prepared = await existing.future;
+      return ensureFontRegistered(
+        prepared,
+        convert: convert,
+        fontCacheEnabled: fontCacheEnabled,
+        fontCacheLimit: fontCacheLimit,
+      );
+    }
     _discard(key);
     return _start(
       key,
       priority: RequestPriority.interactive,
       fontCacheEnabled: fontCacheEnabled,
       fontCacheLimit: fontCacheLimit,
+      registerFont: true,
     ).future;
   }
 
   /// 后台备好某一章并等待就绪。失败或服务端错位时返回 null。
   /// [priority] 用来区分空闲预取与用户正等着的那一章。
+  /// [registerFont] 为 false 时仅把字体解到磁盘缓存，真正进入窗口前再注册，
+  /// 避免跳过未读章节永久占用引擎字体内存。
   Future<ReaderPreparedChapter?> prerender({
     required int sortNum,
     required String? convert,
     required bool fontCacheEnabled,
     required int fontCacheLimit,
     RequestPriority priority = RequestPriority.preload,
+    bool registerFont = true,
   }) async {
     final key = (sortNum, convert);
-    final entry =
-        _entries[key] ??
-        _start(
-          key,
-          priority: priority,
-          fontCacheEnabled: fontCacheEnabled,
-          fontCacheLimit: fontCacheLimit,
-        );
+    final existing = _entries[key];
+    final entry = existing != null && !existing.failed
+        ? existing
+        : _start(
+            key,
+            priority: priority,
+            fontCacheEnabled: fontCacheEnabled,
+            fontCacheLimit: fontCacheLimit,
+            registerFont: registerFont,
+          );
+    _touch(key, entry);
     try {
       await entry.future;
     } catch (_) {
       return null;
     }
-    return identical(_entries[key], entry) ? entry.value : null;
+    if (!identical(_entries[key], entry)) return null;
+    final value = entry.value;
+    if (value == null) return null;
+    if (registerFont && value.needsFontRegistration) {
+      return ensureFontRegistered(
+        value,
+        convert: convert,
+        fontCacheEnabled: fontCacheEnabled,
+        fontCacheLimit: fontCacheLimit,
+      );
+    }
+    return value;
+  }
+
+  /// 确保已预渲染的章节字体已注册进 Flutter 引擎，并回写缓存条目。
+  Future<ReaderPreparedChapter> ensureFontRegistered(
+    ReaderPreparedChapter prepared, {
+    required String? convert,
+    required bool fontCacheEnabled,
+    required int fontCacheLimit,
+  }) async {
+    if (!prepared.needsFontRegistration) return prepared;
+    String? fontFamily;
+    String? fontWarning;
+    try {
+      fontFamily = await _fonts.loadFamily(
+        prepared.chapter.fontUrl,
+        cacheEnabled: fontCacheEnabled,
+        cacheLimit: fontCacheLimit,
+      );
+    } catch (_) {
+      fontWarning = '章节字体加载失败，已显示正文；重试章节可恢复正常字形。';
+    }
+    final updated = prepared.withFont(
+      fontFamily: fontFamily,
+      fontWarning: fontWarning,
+    );
+    final key = (prepared.sortNum, convert);
+    final entry = _entries[key];
+    if (entry != null && identical(entry.value, prepared)) {
+      entry.value = updated;
+    }
+    return updated;
   }
 
   /// 丢掉别的繁简版本，连同在途请求一起。切换繁简后旧版本的正文不会再用到。
@@ -128,15 +223,18 @@ class ReaderChapterPrerenderer {
     required RequestPriority priority,
     required bool fontCacheEnabled,
     required int fontCacheLimit,
+    required bool registerFont,
   }) {
     final entry = _PrerenderEntry(CancelToken());
     _entries[key] = entry;
+    _evictOverflow(protect: key);
     entry.future = _prepare(
       key,
       entry,
       priority: priority,
       fontCacheEnabled: fontCacheEnabled,
       fontCacheLimit: fontCacheLimit,
+      registerFont: registerFont,
     );
     // 预渲染结果没有 await，异常在此吞掉。
     unawaited(entry.future.then((_) {}, onError: (_) {}));
@@ -149,6 +247,7 @@ class ReaderChapterPrerenderer {
     required RequestPriority priority,
     required bool fontCacheEnabled,
     required int fontCacheLimit,
+    required bool registerFont,
   }) async {
     try {
       final content = await _api.getNovelContent(
@@ -160,18 +259,34 @@ class ReaderChapterPrerenderer {
       );
       String? fontFamily;
       String? fontWarning;
-      try {
-        fontFamily = await _fonts.loadFamily(
-          content.chapter.fontUrl,
-          cacheEnabled: fontCacheEnabled,
-          cacheLimit: fontCacheLimit,
-          cancelToken: entry.token,
-        );
-      } on RequestCancelledError {
-        rethrow;
-      } catch (_) {
-        // 字体服务偶发失败时仍显示已取回的章节，避免把可恢复问题报成整章失败。
-        fontWarning = '章节字体加载失败，已显示正文；重试章节可恢复正常字形。';
+      if (registerFont) {
+        try {
+          fontFamily = await _fonts.loadFamily(
+            content.chapter.fontUrl,
+            cacheEnabled: fontCacheEnabled,
+            cacheLimit: fontCacheLimit,
+            priority: priority,
+            cancelToken: entry.token,
+          );
+        } on RequestCancelledError {
+          rethrow;
+        } catch (_) {
+          // 字体服务偶发失败时仍显示已取回的章节，避免把可恢复问题报成整章失败。
+          fontWarning = '章节字体加载失败，已显示正文；重试章节可恢复正常字形。';
+        }
+      } else {
+        try {
+          await _fonts.prefetchToDisk(
+            content.chapter.fontUrl,
+            cacheEnabled: fontCacheEnabled,
+            cacheLimit: fontCacheLimit,
+            cancelToken: entry.token,
+          );
+        } on RequestCancelledError {
+          rethrow;
+        } catch (_) {
+          // 预取字体失败时延后到真正展示再重试注册。
+        }
       }
       final markup = await _buildChapterMarkup(content.chapter.content);
       final prepared = ReaderPreparedChapter(
@@ -201,14 +316,14 @@ class _ChapterMarkup {
   final Map<String, String> notes;
 }
 
-/// 短于此长度的正文直接在当前 isolate 算：spawn 与入参拷贝比这点扫描还贵。
+/// 短于此长度的正文直接在当前 isolate 算：入参拷贝比这点扫描还贵。
 const int _isolateMarkupThreshold = 4096;
 
-/// 全章 DOM 解析与分块放到后台 isolate，避免在阅读途中阻塞 UI。
+/// 全章 DOM 解析与分块放到后台 worker isolate，避免在阅读途中阻塞 UI。
 Future<_ChapterMarkup> _buildChapterMarkup(String html) =>
     html.length < _isolateMarkupThreshold
     ? Future<_ChapterMarkup>.value(_chapterMarkup(html))
-    : Isolate.run(() => _chapterMarkup(html));
+    : BackgroundWorker.run(() => _chapterMarkup(html));
 
 _ChapterMarkup _chapterMarkup(String html) {
   final document = ReaderHtmlDocument.parse(html);

@@ -14,6 +14,11 @@ class BookMetadataCache {
   BookMetadataCache(this._store);
   final KeyValueStore _store;
 
+  static const int _maxBooks = 1000;
+  Map<int, BookListItem>? _memoryBooks;
+  DateTime? _memorySavedAt;
+  Future<void> _writeQueue = Future<void>.value();
+
   Future<List<BookListItem>> resolve(
     List<int> ids,
     Future<List<BookListItem>> Function(List<int>) loader,
@@ -22,52 +27,99 @@ class BookMetadataCache {
     final missing = ids.where((id) => !cached.containsKey(id)).toList();
     if (missing.isNotEmpty) {
       final fetched = await loader(missing);
-      for (final book in fetched) {
-        cached[book.id] = book;
+      if (fetched.isNotEmpty) {
+        _mergeInto(cached, fetched);
+        await _write(cached);
       }
-      await _write(cached);
     }
     return <BookListItem>[
       for (final id in ids) ?cached[id],
     ];
   }
 
-  Future<Map<int, BookListItem>> _read() async {
-    try {
-      final raw = await _store.read(bookMetadataCacheKey);
-      if (raw == null) return <int, BookListItem>{};
-      final record = jsonDecode(raw) as Map<String, dynamic>;
-      final savedAt = DateTime.tryParse(record['savedAt'] as String? ?? '');
-      if (savedAt == null || DateTime.now().difference(savedAt).inDays >= 7) {
-        return <int, BookListItem>{};
-      }
-      return <int, BookListItem>{
-        for (final value in record['items'] as List<dynamic>)
-          if (value is Map<String, dynamic>)
-            BookListItem.decode(value).id: BookListItem.decode(value),
-      };
-    } catch (_) {
-      return <int, BookListItem>{};
+  void _mergeInto(
+    Map<int, BookListItem> target,
+    Iterable<BookListItem> books,
+  ) {
+    for (final book in books) {
+      // 删除再插入，把最近命中的书目移到表尾，淘汰时保留新条目。
+      target.remove(book.id);
+      target[book.id] = book;
+    }
+    while (target.length > _maxBooks) {
+      target.remove(target.keys.first);
     }
   }
 
-  Future<void> _write(Map<int, BookListItem> books) => _store.write(
-    bookMetadataCacheKey,
-    jsonEncode(<String, Object?>{
-      'savedAt': DateTime.now().toUtc().toIso8601String(),
-      'items': books.values.take(1000).map((book) => book.encode()).toList(),
-    }),
-  );
+  Future<Map<int, BookListItem>> _read() async {
+    final inMemory = _memoryBooks;
+    final savedAt = _memorySavedAt;
+    if (inMemory != null &&
+        savedAt != null &&
+        DateTime.now().difference(savedAt).inDays < 7) {
+      return inMemory;
+    }
+    try {
+      final raw = await _store.read(bookMetadataCacheKey);
+      if (raw == null) {
+        _memoryBooks = <int, BookListItem>{};
+        _memorySavedAt = DateTime.now();
+        return _memoryBooks!;
+      }
+      final record = jsonDecode(raw) as Map<String, dynamic>;
+      final parsedSavedAt = DateTime.tryParse(
+        record['savedAt'] as String? ?? '',
+      );
+      if (parsedSavedAt == null ||
+          DateTime.now().difference(parsedSavedAt).inDays >= 7) {
+        _memoryBooks = <int, BookListItem>{};
+        _memorySavedAt = DateTime.now();
+        return _memoryBooks!;
+      }
+      final books = <int, BookListItem>{};
+      for (final value in record['items'] as List<dynamic>) {
+        if (value is Map<String, dynamic>) {
+          final book = BookListItem.decode(value);
+          books[book.id] = book;
+        }
+      }
+      _memoryBooks = books;
+      _memorySavedAt = parsedSavedAt;
+      return books;
+    } catch (_) {
+      _memoryBooks = <int, BookListItem>{};
+      _memorySavedAt = DateTime.now();
+      return _memoryBooks!;
+    }
+  }
+
+  Future<void> _write(Map<int, BookListItem> books) {
+    final now = DateTime.now().toUtc();
+    _memoryBooks = books;
+    _memorySavedAt = now;
+    final encoded = jsonEncode(<String, Object?>{
+      'savedAt': now.toIso8601String(),
+      'items': books.values.map((book) => book.encode()).toList(),
+    });
+    final next = _writeQueue.then(
+      (_) => _store.write(bookMetadataCacheKey, encoded),
+      onError: (_) => _store.write(bookMetadataCacheKey, encoded),
+    );
+    _writeQueue = next.then((_) {}, onError: (_) {});
+    return next;
+  }
 
   Future<void> putAll(Iterable<BookListItem> books) async {
     final cached = await _read();
-    for (final book in books) {
-      cached[book.id] = book;
-    }
+    _mergeInto(cached, books);
     await _write(cached);
   }
 
-  Future<void> clear() => _store.delete(bookMetadataCacheKey);
+  Future<void> clear() {
+    _memoryBooks = null;
+    _memorySavedAt = null;
+    return _store.delete(bookMetadataCacheKey);
+  }
 
   Future<List<BookListItem>?> readList(String name, Duration maxAge) async {
     try {

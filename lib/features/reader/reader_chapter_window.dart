@@ -45,6 +45,13 @@ class ReaderChapterWindow {
         : ReaderChapterWindow._(chapters, index);
   }
 
+  /// 判断 [sortNum] 当前能否直接接到窗口两端。
+  bool canJoin(int sortNum) {
+    if (isEmpty || at(sortNum) != null) return false;
+    return sortNum == chapters.first.sortNum - 1 ||
+        sortNum == chapters.last.sortNum + 1;
+  }
+
   /// 把备好的一章接在窗口两端；与窗口不相邻的丢弃。
   ReaderChapterWindow withNeighbor(ReaderPreparedChapter chapter) {
     if (isEmpty || at(chapter.sortNum) != null) return this;

@@ -99,6 +99,11 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
   /// 已提交 precache 的缓存键，快速滚动时同一张图不重复排解码任务。
   final Set<String> _precachedKeys = <String>{};
 
+  /// 按页记录已进入解码缓存的 provider，翻远后主动逐出，控制漫画内存峰值。
+  final Map<int, (String key, CachedNetworkImageProvider provider)>
+  _precachedByPage = <int, (String, CachedNetworkImageProvider)>{};
+  static const int _comicKeepRadius = 6;
+
   /// MediaQuery 只在 `didChangeDependencies` 里读一次，滚动回调不逐帧查 InheritedModel。
   Size _screenSize = Size.zero;
   double _devicePixelRatio = 1;
@@ -188,6 +193,7 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
   @override
   void dispose() {
     _prefetchTimer?.cancel();
+    _evictAllComicImages();
     unawaited(_progress.dispose());
     _pageController?.dispose();
     _scrollController?.dispose();
@@ -196,15 +202,39 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
     super.dispose();
   }
 
+  void _evictAllComicImages() {
+    final cache = PaintingBinding.instance.imageCache;
+    for (final entry in _precachedByPage.values) {
+      cache.evict(entry.$2);
+    }
+    _precachedByPage.clear();
+    _precachedKeys.clear();
+  }
+
+  void _evictDistantComicImages(int centerPage) {
+    if (_precachedByPage.isEmpty) return;
+    final cache = PaintingBinding.instance.imageCache;
+    final stale = <int>[
+      for (final page in _precachedByPage.keys)
+        if ((page - centerPage).abs() > _comicKeepRadius) page,
+    ];
+    for (final page in stale) {
+      final removed = _precachedByPage.remove(page);
+      if (removed == null) continue;
+      _precachedKeys.remove(removed.$1);
+      cache.evict(removed.$2);
+    }
+  }
+
   Future<void> _loadChapter({bool openAtEnd = false}) async {
     final version = beginRequest();
+    _evictAllComicImages();
     setState(() {
       loading = true;
       loadError = null;
       _loadingBatches.clear();
       _failedBatches.clear();
       _pendingBatches.clear();
-      _precachedKeys.clear();
     });
     try {
       // 章节列表只在首次进入时取一次，换章时服务端进度不适用，从第一页开始。
@@ -422,20 +452,21 @@ class _ComicReaderScreenState extends ConsumerState<ComicReaderScreen>
       );
       final cacheKey = BookImage.cacheKeyFor(url);
       if (!_precachedKeys.add(cacheKey)) continue;
+      final provider = CachedNetworkImageProvider(
+        url,
+        cacheKey: cacheKey,
+        cacheManager: appImageCacheManager,
+      );
+      _precachedByPage[index] = (cacheKey, provider);
       unawaited(
-        precacheImage(
-          CachedNetworkImageProvider(
-            url,
-            cacheKey: cacheKey,
-            cacheManager: appImageCacheManager,
-          ),
-          context,
-        ).catchError((Object _) {
+        precacheImage(provider, context).catchError((Object _) {
           // 预取失败的键放回去，下次经过这页还能再试。
           _precachedKeys.remove(cacheKey);
+          _precachedByPage.remove(index);
         }),
       );
     }
+    _evictDistantComicImages(_page);
   }
 
   void _stage(int page) {

@@ -18,9 +18,41 @@ class GridSelectionOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (selected) {
-      return const ColoredBox(
-        color: Color(0xB8D9475D),
-        child: Center(child: Icon(Icons.check, size: 34, color: Colors.white)),
+      final theme = Theme.of(context);
+      final colors = theme.colorScheme;
+      final isDark = theme.brightness == Brightness.dark;
+      final scrim = isDark
+          ? colors.primaryContainer.withValues(alpha: 0.44)
+          : colors.primary.withValues(alpha: 0.24);
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: scrim,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.primary, width: 3),
+        ),
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.primary,
+              shape: BoxShape.circle,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: colors.shadow.withValues(alpha: 0.28),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                Icons.check_rounded,
+                size: 24,
+                color: colors.onPrimary,
+              ),
+            ),
+          ),
+        ),
       );
     }
     if (sorting) {
