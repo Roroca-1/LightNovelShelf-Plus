@@ -115,7 +115,28 @@ void main() {
 
     test('安装包版本缺失时退回构建注入标签', () {
       expect(resolveCurrentVersion('', 'V1.13.2-Plus'), '1.13.2');
-      expect(resolveCurrentVersion('  ', 'v1.12.3-Plus.1'), '1.12.3');
+      expect(resolveCurrentVersion('  ', 'v1.12.3-Plus.1'), '1.12.3-Plus.1');
+    });
+
+    test('同基础版本的 -Plus.N 从构建标签继承并在版本比较中生效', () {
+      expect(
+        resolveCurrentVersion('1.13.2', 'V1.13.2-Plus.2'),
+        '1.13.2-Plus.2',
+      );
+      expect(resolveCurrentVersion('1.14.0', 'V1.13.2-Plus.2'), '1.14.0');
+      expect(resolveCurrentVersion('1.13.2', 'ci-42'), '1.13.2');
+
+      final current = resolveCurrentVersion('1.13.2', 'V1.13.2-Plus.2');
+      final sameRelease = AppRelease.decode(<String, Object?>{
+        'tag_name': 'V1.13.2-Plus.2',
+        'html_url': 'https://example.com/release',
+      });
+      final nextRelease = AppRelease.decode(<String, Object?>{
+        'tag_name': 'V1.13.2-Plus.3',
+        'html_url': 'https://example.com/release',
+      });
+      expect(isNewerVersion(sameRelease.version, current), isFalse);
+      expect(isNewerVersion(nextRelease.version, current), isTrue);
     });
 
     test('两边都取不到版本时按 0.0.0 处理', () {
@@ -125,9 +146,18 @@ void main() {
   });
 
   group('plusVersionLabel', () {
-    test('带上 Plus 标识与构建号', () {
+    test('带上 Plus 标识、重发序号与构建号', () {
       expect(plusVersionLabel('1.13.2', '26'), '1.13.2-Plus (26)');
       expect(plusVersionLabel('V1.13.2-Plus', ''), '1.13.2-Plus');
+      expect(
+        plusVersionLabel('1.13.2', '2028', compiledTag: 'V1.13.2-Plus.2'),
+        '1.13.2-Plus.2 (2028)',
+      );
+      expect(
+        plusVersionLabel('', '2028', compiledTag: 'V1.13.2-Plus.2'),
+        '1.13.2-Plus.2 (2028)',
+      );
+      expect(plusVersionLabel('', '', compiledTag: 'ci-42'), '版本未知');
       expect(plusVersionLabel('', ''), '版本未知');
     });
   });
@@ -428,6 +458,32 @@ void main() {
       );
       await repository.cleanInstalledApks('1.13.2');
       expect(await missing.exists(), isFalse);
+    });
+
+    test('清理旧的 -Plus.N 补丁包而保留当前补丁包', () async {
+      final files = <File>[
+        File(
+          '${directory.path}/1.13.2-LightNovelShelfPlus-V1.13.2-Plus-arm64-v8a.apk',
+        ),
+        File(
+          '${directory.path}/1.13.2-Plus.1-LightNovelShelfPlus-V1.13.2-Plus.1-arm64-v8a.apk',
+        ),
+        File(
+          '${directory.path}/1.13.2-Plus.2-LightNovelShelfPlus-V1.13.2-Plus.2-arm64-v8a.apk',
+        ),
+      ];
+      for (final file in files) {
+        await file.writeAsString('x');
+      }
+      final repository = build(
+        MockClient((request) async => http.Response('', 200)),
+      );
+      await repository.cleanInstalledApks('1.13.2-Plus.2');
+      final names =
+          await directory.list().map((e) => e.uri.pathSegments.last).toList();
+      expect(names, <String>[
+        '1.13.2-Plus.2-LightNovelShelfPlus-V1.13.2-Plus.2-arm64-v8a.apk',
+      ]);
     });
   });
 }

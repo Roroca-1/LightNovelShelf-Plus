@@ -43,7 +43,13 @@ class _AboutSettingsScreenState extends ConsumerState<AboutSettingsScreen> {
       // 取不到安装包信息时退回构建注入的发布标签。
     }
     if (!mounted) return;
-    setState(() => _version = plusVersionLabel(version, build));
+    setState(
+      () => _version = plusVersionLabel(
+        version,
+        build,
+        compiledTag: compiledReleaseTag,
+      ),
+    );
   }
 
   Future<void> _checkUpdate() async {

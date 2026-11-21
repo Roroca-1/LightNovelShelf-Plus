@@ -165,22 +165,47 @@ String releaseVersion(String tag) {
   return revision == 0 ? base : '$base-Plus.$revision';
 }
 
-/// 当前版本：安装包信息优先（与 pubspec 的 `version:` 一致），
-/// 读不到时退回构建注入的 `APP_RELEASE_TAG`；都没有就当 `0.0.0`。
+/// 当前版本：保留同基础版本下的 `-Plus.N` 重发序号。
+///
+/// 安装包 `PackageInfo.version` 来自 `pubspec.yaml`（如 `1.13.2`），不含 `-Plus.N`；
+/// 当构建注入的 `APP_RELEASE_TAG` 与其基础版本一致时，补上对应的重发序号，避免
+/// `-Plus.N` 安装后仍被判成旧版而重复提示更新。安装包读不到时退回构建标签。
 String resolveCurrentVersion(String packageVersion, String compiledTag) {
   final fromPackage = normalizeVersionTag(packageVersion);
-  if (_hasDigit(fromPackage)) return fromPackage;
   final fromTag = normalizeVersionTag(compiledTag);
-  if (_hasDigit(fromTag)) return fromTag;
+  if (_hasDigit(fromPackage)) {
+    final pkgBase = fromPackage.split('+').first.trim();
+    final pkgRev = plusRevision(packageVersion);
+    if (pkgRev > 0) return '$pkgBase-Plus.$pkgRev';
+    final tagBase = fromTag.split('+').first.trim();
+    if (_hasDigit(tagBase) && tagBase == pkgBase) {
+      final tagRev = plusRevision(compiledTag);
+      if (tagRev > 0) return '$pkgBase-Plus.$tagRev';
+    }
+    return fromPackage;
+  }
+  if (_hasDigit(fromTag)) {
+    return releaseVersion(compiledTag);
+  }
   return '0.0.0';
 }
 
-/// 关于页展示的版本串，保留 Plus 标识：`1.13.2-Plus (26)`。
-String plusVersionLabel(String version, String buildNumber) {
-  final base = normalizeVersionTag(version);
-  if (!_hasDigit(base)) return '版本未知';
+/// 关于页展示的版本串，保留 Plus 标识与重发序号：`1.13.2-Plus (26)`、`1.13.2-Plus.2 (2028)`。
+String plusVersionLabel(
+  String version,
+  String buildNumber, {
+  String compiledTag = '',
+}) {
+  if (!_hasDigit(normalizeVersionTag(version)) &&
+      !_hasDigit(normalizeVersionTag(compiledTag))) {
+    return '版本未知';
+  }
+  final resolved = resolveCurrentVersion(version, compiledTag);
+  final base = normalizeVersionTag(resolved);
+  final revision = plusRevision(resolved);
+  final label = revision == 0 ? '$base-Plus' : '$base-Plus.$revision';
   final build = buildNumber.trim();
-  return build.isEmpty ? '$base-Plus' : '$base-Plus ($build)';
+  return build.isEmpty ? label : '$label ($build)';
 }
 
 /// 逐段比较数字：`主.次.修订` + `-Plus.N` 重发序号，忽略 `+构建号`。
@@ -277,7 +302,7 @@ class AppUpdateRepository {
   Future<void> cleanInstalledApks(String currentVersion) async {
     final directory = await _updates();
     if (!await directory.exists()) return;
-    final keep = normalizeVersionTag(currentVersion);
+    final keep = releaseVersion(currentVersion);
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
