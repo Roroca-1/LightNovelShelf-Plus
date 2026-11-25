@@ -27,6 +27,9 @@ enum ReaderThemeSetting { followApp, light, dark }
 
 enum ComicPagedDirection { ltr, rtl }
 
+/// 小说中图像的显示方式：直接显示、点击显示、不显示。
+enum ReaderImageMode { show, tapToShow, hide }
+
 enum CleanChapterTitleScope { continueReading, readerTitle }
 
 enum BookDisplayMode { grid, list }
@@ -331,6 +334,7 @@ class AppSettings {
     this.comicReader = const ReaderPreferences(),
     this.readerFirstLineIndent = true,
 
+    this.readerImageMode = ReaderImageMode.show,
     this.readerJustify = false,
     this.readerLineHeight = 1.5,
     this.readerLineSpace = 4,
@@ -373,6 +377,7 @@ class AppSettings {
   final ReaderPreferences comicReader;
   final bool readerFirstLineIndent;
 
+  final ReaderImageMode readerImageMode;
   final bool readerJustify;
   final double readerLineHeight;
   final double readerLineSpace;
@@ -415,6 +420,7 @@ class AppSettings {
     ReaderPreferences? comicReader,
     bool? readerFirstLineIndent,
 
+    ReaderImageMode? readerImageMode,
     bool? readerJustify,
     double? readerLineHeight,
     double? readerLineSpace,
@@ -458,6 +464,7 @@ class AppSettings {
     comicReader: comicReader ?? this.comicReader,
     readerFirstLineIndent: readerFirstLineIndent ?? this.readerFirstLineIndent,
 
+    readerImageMode: readerImageMode ?? this.readerImageMode,
     readerJustify: readerJustify ?? this.readerJustify,
     readerLineHeight: readerLineHeight ?? this.readerLineHeight,
     readerLineSpace: readerLineSpace ?? this.readerLineSpace,
@@ -525,6 +532,11 @@ class AppSettings {
       comicReader: ReaderPreferences.decode(raw['comicReader']),
       readerFirstLineIndent: _bool(raw['readerFirstLineIndent'], true),
 
+      readerImageMode: _enumFromName(
+        ReaderImageMode.values,
+        raw['readerImageMode'],
+        ReaderImageMode.show,
+      ),
       readerJustify: _bool(raw['readerJustify'], false),
       readerLineHeight: _clampDouble(raw['readerLineHeight'], 1, 2.5, 1.5),
       readerLineSpace: _clampDouble(raw['readerLineSpace'], 0, 16, 4),
@@ -605,6 +617,7 @@ class AppSettings {
     'comicReader': comicReader.encode(),
     'readerFirstLineIndent': readerFirstLineIndent,
 
+    'readerImageMode': readerImageMode.name,
     'readerJustify': readerJustify,
     'readerLineHeight': readerLineHeight,
     'readerLineSpace': readerLineSpace,
@@ -649,6 +662,7 @@ class AppSettings {
       other.novelReader == novelReader &&
       other.comicReader == comicReader &&
       other.readerFirstLineIndent == readerFirstLineIndent &&
+      other.readerImageMode == readerImageMode &&
       other.readerJustify == readerJustify &&
       other.readerLineHeight == readerLineHeight &&
       other.readerLineSpace == readerLineSpace &&
@@ -691,6 +705,7 @@ class AppSettings {
     comicReader,
     readerFirstLineIndent,
 
+    readerImageMode,
     readerJustify,
     readerLineHeight,
     readerLineSpace,
